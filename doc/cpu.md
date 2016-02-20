@@ -27,91 +27,146 @@ v9-cpu是一个假想的简单CPU，用于操作系统教学实验和练习．
 其中 4 条既不需要操作数,也不需要当前的 CPU 信息;还有 92 条也不需要操作数,但需要当
 前 CPU 的信息;剩下的 113 条命令,需要一个 24 位的操作数和当前的 CPU 信息。
 
+整体来看,指令分为三大类:运算比较指令、流程控制指令、装载卸载指令。另外还有其
+他的辅助指令:例如系统命令(例如 HALT,IDLE,RTI,BIN 等)、系统设置(例如 SSP,
+USP,IVEC, PDIR 等)、扩展函数库(NET 类,MCP 类等)。
+
 
 v9-cpu的指令集如下：
 
-```
-指令				  编码								功能
+### system
+- HALT, // halt system,
+- ENT, LEV, // sp +/- operand0
+- JMP, // jump to operand0
+- JMPI, // jump to operand0 + (a * sizeof(union insnfmt_t))
+- JSR,  // jump to operand0, sp -= 8;
+- JSRA, // jump to operand0 + (a * sizeof(union insnfmt_t)), sp -= 8.
+- LEA, LEAG, // a = sp/pc + operand0
+- CYC, // a = current cycle related with pc.
+- MCPY, MCMP, MCHR, MSET, // memcpy/memcmp/memchr/memset(a, b, c)
 
-计算指令
+### load to register a
+a = *(uint/short/ushort/char/uchar/double/float *)addr
 
-ADDIU rt rs imme  001001ssssstttttiiiiiiiiiiiiiiii  rt <- rs + sign_extend(imme)
-ANDI  rt rs imme  001100ssssstttttiiiiiiiiiiiiiiii  rt <- rs & zero_extend(imme)
-ORI   rt rs imme  001101ssssstttttiiiiiiiiiiiiiiii  rt <- rs | zero_extend(imme)
-XORI  rt rs imme  001110ssssstttttiiiiiiiiiiiiiiii  rt <- rs ^ zero_extend(imme)
-ADDU  rd rs rt	  000000ssssstttttddddd00000100001  rd <- rs + rt
-SUBU  rd rs rt    000000ssssstttttddddd00000100011  rd <- rs - rt
-AND   rd rs rt	  000000ssssstttttddddd00000100100  rd <- rs & rt
-OR    rd rs rt    000000ssssstttttddddd00000100101  rd <- rs | rt
-XOR   rd rs rt    000000ssssstttttddddd00000100110  rd <- rs ^ rt
-NOR   rd rs rt    000000ssssstttttddddd00000100111  rd <- ~(rs | rt)
-MULT  rs rt       000000sssssttttt0000000000011000  lo <- (rs * rt) >> 32,  hi <- (rs * rt) & 65535
-DIV   rs rt       000000sssssttttt0000000000011010  lo <- rs / rt,  hi <- rs % rt
-SLL   rd rt imme  00000000000tttttdddddiiiii000000  rd <- rt sll imme
-SRL   rd rt imme  00000000000tttttdddddiiiii000010  rd <- rt srl imme
-SRA   rd rt imme  00000000000tttttdddddiiiii000011  rd <- rt sra imme
-SLLV  rd rt rs    000000ssssstttttddddd00000000100  rd <- rt sll rs
-SRLV  rd rt rs    000000ssssstttttddddd00000000110  rd <- rt srl rs
-SRAV  rd rt rs    000000ssssstttttddddd00000000111  rd <- rt sra rs
+- LL, LLS, LLH, LLC, LLB, LLD, LLF, // a=content(local_addr) ; local addr= operand0 + sp
+- LG, LGS, LGH, LGC, LGB, LGD, LGF, // a=content(global_addr) ; global_addr = operand0 + pc
+- LX, LXS, LXH, LXC, LXB, LXD, LXF, // a=content(virt_addr); virt_addr = vir2phy(operand0)
 
-条件跳转指令
+### load register b
+b = *(uint/short/ushort/char/uchar/double/float *)addr
 
-BLTZ  rs imme     000001sssss00000iiiiiiiiiiiiiiii  if (rs < 0)   PC <- PC + sign_extend(imme)
-BGEZ  rs imme     000001sssss00001iiiiiiiiiiiiiiii  if (rs >= 0)  PC <- PC + sign_extend(imme)
-BEQ   rs rt imme  000100ssssstttttiiiiiiiiiiiiiiii  if (rs == rt) PC <- PC + sign_extend(imme)
-BNE   rs rt	imme  000101ssssstttttiiiiiiiiiiiiiiii  if (rs != rt) PC <- PC + sign_extend(imme)
-BLEZ  rs imme     000110sssss00000iiiiiiiiiiiiiiii  if (rs <= 0)  PC <- PC + sign_extend(imme)
-BGTZ  rs imme	  000111sssss00000iiiiiiiiiiiiiiii  if (rs > 0)   PC <- PC + sign_extend(imme)
-
-跳转指令
-
-J     imme        000010iiiiiiiiiiiiiiiiiiiiiiiiii  PC <- sign_extend(imme)
-JAL   imme        000011iiiiiiiiiiiiiiiiiiiiiiiiii  PC <- sign_extend(imme), ra <- RPC
-JR    rs		  000000sssss000000000000000001000  PC <- rs
-JALR  rs rd		  000000sssss00000ddddd00000001001  PC <- rs, rd <- RPC
+- LBL, LBLS, LBLH, LBLC, LBLB, LBLD, LBLF, // b=content(local_addr) ; local addr= operand0 + sp
+- LBG, LBGS, LBGH, LBGC, LBGB, LBGD, LBGF, // b=content(global_addr) ; global_addr = operand0 + pc
+- LBX, LBXS, LBXH, LBXC, LBXB, LBXD, LBXF, // b=content(virt_addr); virt_addr = vir2phy(operand0)
 
 
-SLT   rd rs rt	  000000ssssstttttddddd00000101010  rd <- (rs < rt) (sign_compare)
-SLTU  rd rs rt    000000ssssstttttddddd00000101011  rd <- (rs < rt) (unsign_compare)
-SLTI  rt rs imme  001010ssssstttttiiiiiiiiiiiiiiii  rt <- (rs < sign_extend(imme)) (sign_compare)
-SLTIU rt rs imme  001011ssssstttttiiiiiiiiiiiiiiii  rt <- (rs < zero_extend(imme)) (unsign_compare)
+### load a immediate
+- LI, // a = operand0
+- LHI, // a = (a << 24) | ((uint)operand0 >> 8)
+- LIF, // f = operand0
 
-MFLO  rd		  0000000000000000ddddd00000010010  rd <- lo
-MFHI  rd		  0000000000000000ddddd00000010000  rd <- hi
-MTLO  rd		  0000000000000000ddddd00000010011  lo <- rd
-MTHI  rd		  0000000000000000ddddd00000010001  hi <- rd
-MFC0  rt rd		  01000000000tttttddddd00000000000  rt <- cp0[rd]
-MTC0  rt rd       01000000100tttttddddd00000000000  cp0[rd] <- rt
 
-LB    rt rs imme  100000ssssstttttiiiiiiiiiiiiiiii  sign_extend(rt <- MEM[rs+sign_extend(imme)] & 255)
-LBU   rt rs imme  100100ssssstttttiiiiiiiiiiiiiiii  zero_extend(rt <- MEM[rs+sign_extend(imme)] & 255)
-LH    rt rs imme  100001ssssstttttiiiiiiiiiiiiiiii  sign_extend(rt <- MEM[rs+sign_extend(imme)] & 65535)
-LHU   rt rs imme  100101ssssstttttiiiiiiiiiiiiiiii  zero_extend(rt <- MEM[rs+sign_extend(imme)] & 65535)
-LW    rt rs imme  100011ssssstttttiiiiiiiiiiiiiiii  rt <- MEM[rs+sign_extend(imme)]
-SB    rt rs imme  101000ssssstttttiiiiiiiiiiiiiiii  MEM[rs+sign_extend(imme)] <- MEM[rs+sign_extend(imme)] & ~(255) | (rt & 255)
-SW    rt rs imme  101011ssssstttttiiiiiiiiiiiiiiii  MEM[rs+sign_extend(imme)] <- rt
+### store register a to memory 
+*(uint/short/ushort/char/uchar/double/float *)addr = a
 
-SYSCALL           00000000000000000000000000001100  system call
-ERET			  01000010000000000000000000000000  PC <- cp0[EPC], cp0_status <- cp0_status & ~(1<<EXL)
-TLBWI			  01000010000000000000000000000010  write TLB table item in special index.
-```
+- SL, SLH, SLB, SLD, SLF, // *(local_addr)=a; local_addr = operand0 + sp
+- SG, SGH, SGB, SGD, SGF, // *(global_addr)=a; global_addr = operand + pc
+- SX, SXH, SXB, SXD, SXF, // *(virt_addr)=a; virt_addr = vir2phy(operand0)
 
+### arithmetic
+- ADDF, SUBF, MULF, DIVF, // floating point arithmetic: f = fx(f, g)
+- ADD, ADDI, ADDL, // a += b/operand0/(operand0 + sp)
+- SUB, SUBI, SUBL, // a -= b/operand0/(operand0 + sp)
+- MUL, MULI, MULL, // (int)a *= (int)b/(int)operand0/(int)(operand0 + sp)
+- DIV, DIVI, DIVL, // (int)a /= (int)b/(int)operand0/(int)(operand0 + sp)
+- DVU, DVUI, DVUL, // (uint)a /= (uint)b/(uint)operand0/(uint)(operand0 + sp)
+- MOD, MODI, MODL, // (int)a %= (int)b/(int)operand0/(int)(operand0 + sp)
+- MDU, MDUI, MDUL, // (uint)a %= (uint)b/(uint)operand0/(uint)(operand0 + sp)
+- AND, ANDI, ANDL, // a &= b/operand0/(operand0 + sp)
+- OR, ORI, ORL, // a |= b/operand0/(operand0 + sp)
+- XOR, XORI, XORL, // a ^= b/operand0/(operand0 + sp)
+- SHL, SHLI, SHLL, // a <<= b/operand0/(operand0 + sp)
+- SHR, SHRI, SHRL, // (int)a >>= (int)b/(int)operand0/(int)(operand0 + sp)
+- SRU, SRUI, SRUL, // (uint)a >>= (uint)b/(uint)operand0/(uint)(operand0 + sp)
+- EQ, EQF, // (a = a == b)/(a = f == g)
+- NE, NEF, // (a = a != b)/(a = f != g)
+- LT, LTU, LTF,// (a = (int/uint)a < (int/uint)b)/(a = f < g)
+- GE, GEU, GEF,// (a = (int/uint)a >= (int/uint)b)/(a = f >= g)
+
+
+### conditional branch
+- BZ, BZF, // branch to operand0 if a/f is zero
+- BNZ, BNZF,  // branch to operand0 if a/f is non-zero
+- BE, BEF, // branch to operand0 if (a == b)/(f == g)
+- BNE, BNEF, // branch to operand0 if (a != b)/(f != g)
+- BLT, BLTU, BLTF, // branch to operand0 if ((int/uint)a < (int/uint)b)/(f < g)
+- BGE, BGEU, BGEF, // branch to operand0 if ((int/uint)a >= (int/uint)b)/f >= g)
+
+### conversion
+- CID, // f = (int)a
+- CUD, // f = (uint)a
+- CDI, // a = (int)f
+- CDU, // a = (uint)f
+
+### misc
+- CLI, // a = iena, iena = 0 -- clear interrupt flag, return orig val.
+- STI, // if generated by hardware: set trap, and process the interrupt;
+          else: iena = 1 -- set interrupt flag
+- RTI, // return from interrupt, set pc, sp, may switch user/kernel mode;
+          if has pending interrupt, process the interrupt
+- BIN, // a = kbchar -- kbchar is the value from outside io
+- BOUT, // a = write(a, &b, 1);
+- NOP, // no operation.
+- SSP, // ksp = a -- ksp is kernel sp
+- PSHA, // sp -= 8, *sp = a
+- PSHI, // sp -= 8, *sp = operand0
+- PSHF, // sp -= 8, *(double *)sp = f
+- PSHB, // sp -= 8, *sp = b
+- POPB, // b = *sp, sp += 8
+- POPF,  // f = *(double *)sp, sp += 8
+- POPA,  // a = *sp, sp += 8
+- IVEC, // ivec = a -- set interrupt vector by a
+- PDIR, // pdir = mem + a -- set page directory physical memory by a
+- SPAG, // paging = a -- enable/disable virtual memory feature by a
+- TIME, // if operand0 is 0: timeout = a -- set current timeout from a;
+           else: printk("timer%d=%u timeout=%u", operand0, timer, timeout)
+- LVAD, // a = vadr -- vadr is bad virtual address
+- TRAP, // trap = FSYS
+- LUSP, SUSP, // (a = usp)/(usp = a) -- usp is user stack pointer 
+- LCL,  // c = *(uint *)(sp + operand0)
+- LCA, // c = a
+- PSHC, POPC, // (sp -= 8, *sp = c)/(c = *sp, sp += 8)
+- MSIZ, // a = memsz -- move physical memory to a.
+- PSHG, POPG, // (sp -= 8, *sp = g)/(g = *sp, sp += 8)
+
+
+### network
+- NET1, // a = socket(a, b, c)
+- NET2, // a = close(a)
+- NET3, // a = connect(a, addr(b, c), sizeof(addr)); addr.sin_family = b & 0xFFFF;
+           addr.sin_port = b >> 16; addr.sin_addr.s_addr = c;
+- NET4, // a = read(a, b, c)
+- NET5, // a = write(a, b, c)
+- NET6, // a = poll(&pfd(a), 1, 0); pfd.fd = a; pfd.events = POLLIN;
+- NET7, // a = bind(a, addr(b, c), sizeof(addr)); addr.sin_family = b & 0xFFFF;
+           addr.sin_port = b >> 16; addr.sin_addr.s_addr = c;
+- NET8, // a = listen(a, b)
+- NET9, // a = accept(a, b, c);
+
+### math 
+f = fx(f)/fx(f, g)
+
+- POW, ATN2, FABS, ATAN, LOG, LOGT, EXP, FLOR, CEIL, HYPO, SIN, COS, TAN, ASIN,
+ACOS, SINH, COSH, TANH, SQRT, FMOD,
+
+### cpu idle
+- IDLE // response hardware interrupt (include timer).
 
 ## 内存
 
-v9-cpu的内存是设在javascript环境下的一段预设数组中，数组储存的内容为32位整数。内存设置了与处理器相连的三个数据通路，分别用于指令的读取，数据的读取以及数据的写入。数据通路由32位的数据线，22位的地址线和读写使能构成。读写使能跟一般的RAM相比做了很大的简化。当写入数据时，直接将OE和WE置0，当读取数据时，将OE和RE置0。内存划分为指令区域，只读区域，读写区域以及IO缓存区域，指令存放的地址空间为0x0000~0x0fff（虚地址，下同），只能读取不能更改的地址空间为0x1000~0x2fff，自由读写的地址空间为0x3000~0xbeff，IO的缓存即串口缓存的地址为0xbf00,0xbf01,0xbf02,0xbf03。
-实地址与虚地址之间的转换通过地址映射方法（静态）以及常规的由TLB寄存器储存的页表（动态）来配合实现。TLB的表项长度为64位，前22位为虚地址的前22位，后面依次跟着奇偶实地址对应的前22位和标志位。实虚地址转换的过程如下：
-（1）	对输入的虚地址进行合法性检测，并触发虚地址非法异常。
-（2）	静态方法和动态页表同时进行实地址生成。当动态页表缺失时触发TLB MISS异常，跳转到异常处理代码重填TLB。
-v9-cpu的输入输出包括键盘的输入和屏幕的输出。键盘输入的字符存储于地址0xbf00（串口1），屏幕的输出为0xbf01（串口2）。
 
-中断/异常协 理的一般流程如下:
-(1)		保存中断信息,主要是 EPC,BadVAddr,Status,Cause 等寄存器的信息。
-EPC:存储异常协理之后程序恢复执行的地址。选于一般异常,当前开生错错的指令地址即为EPC应当保存的地址;而选于硬件中断,由于是异步产生则可以任意设定一条并未执行完成的指令地址保存,但在进 入下一步协理之前,该指令前的指令都应当被执行完。
-BadVAddr:捕捉最近一次地址错或TLB异常(重填、失效、修改)时的虚拟地址。 
-Status:将EXL位置为1,进入kernel模式进行中断协理
-Cause:记下异常号。
-EnrtyHi:tlb异常时,记记下BadVAddr的部分高位。
-(2)		根据Cause中的异常号跳转到相应的异常协理函数入口
-(3)		中断协理
-(4)		通过调用ERET指令恢复实复, 返回EPC所存地址执行并且将Status中的EXL重置为0表示进入user模式。
+
+## 中断/异常
+
+
+## CPU执行过程
