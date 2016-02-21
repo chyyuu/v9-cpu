@@ -10,9 +10,11 @@ v9-cpu是一个假想的简单CPU，用于操作系统教学实验和练习．
  - a, b, c : 三个通用寄存器
  - f, g 两个浮点寄存器,是用来进行各种指令操作的。
  - sp 为当前栈指针
- - pc 为程序计数器
+ - pc 为程序计数器（指向下一条指令），其指向的内存内容（即具体的指令值）会放到ir中，给CPU解码并执行
  - tsp 为栈顶指针(本 CPU 的栈是从顶部往底部增长)
  - flags 为状态寄存器(包括当前的运行模式,是否中断使能,是否有自陷,以及是否使用虚拟地址等)。
+ 
+ 
 
 ### flags寄存器标志位
  - user   : 1; 用户态或内核态(user mode or not.)
@@ -36,11 +38,12 @@ v9-cpu的指令集如下：
 
 ### system
 - HALT, // halt system,
-- ENT, LEV, // sp +/- operand0
+- ENT,// sp += operand0
+- LEV, //  pc= *sp, sp + = operand0+8, 
 - JMP, // jump to operand0
 - JMPI, // jump to operand0 + (a * sizeof(union insnfmt_t))
-- JSR,  // jump to operand0, sp -= 8;
-- JSRA, // jump to operand0 + (a * sizeof(union insnfmt_t)), sp -= 8.
+- JSR,  // save current pc, *sp=pc, sp -= 8; jump to operand0 OR pc+=operand0. 
+- JSRA, // save current pc, *sp=pc, sp -= 8; jump to a reg,  pc+=(a * sizeof(union insnfmt_t)).
 - LEA, LEAG, // a = sp/pc + operand0
 - CYC, // a = current cycle related with pc.
 - MCPY, MCMP, MCHR, MSET, // memcpy/memcmp/memchr/memset(a, b, c)
@@ -149,10 +152,95 @@ ACOS, SINH, COSH, TANH, SQRT, FMOD,
 - IDLE // response hardware interrupt (include timer).
 
 ## 内存
+缺省内存大小为128MB，可以通过启动参数"-m XXX"，设置为XXX MB大小．
+在TLB中，设置了4个1MB大小页转换表（page translation buffer array）
+ - kernel read page translation table
+ - kernel write page translation table
+ - user read page translation table
+ - user write page translation table
 
+有两个指针tr/tw, tw指向内核态或用户态的read/write　page translation table．
+```
+tr/tw[page number]=phy page number //页帧号
+```
+还有一个tpage buffer array, 保存了所有tr/tw中的虚页号，这些虚页号是tr/tw数组中的index 
+```
+tpage[tpages++] = v //v是page number
+```
+
+## IO操作
+### 写外设（类似串口写）的步骤
+ - 1 --> a
+ - 一个字符'char' --> b
+ - BOUT　　//如果在内核态，在终端上输出一个字符'char', 1-->a，如果在用户态，产生FPRIV异常
+
+### 读外设（类似串口读）的步骤
+　- BIN  //如果在内核态，kchar -->a  kchar是模拟器定期轮询获得的一个终端输入字符
+ 　　
+如果iena(中断使能)，则在获得一个终端输入字符后，会产生FKEYBD中断 
+ 
+### 设置timer的timeout
+ - val --> a
+ - TIME // 如果在内核态，设置timer的timeout为a; 如果在用户态，产生FPRIV异常
+ 
 
 
 ## 中断/异常
+### 一些变量的含义：
+ - ivec: 中断向量的地址
+ 
+### 中断/异常类型
+- FMEM,          // bad physical address 
+- FTIMER,        // timer interrupt
+- FKEYBD,        // keyboard interrupt
+- FPRIV,         // privileged instruction
+- FINST,         // illegal instruction
+- FSYS,          // software trap
+- FARITH,        // arithmetic trap
+- FIPAGE,        // page fault on opcode fetch
+- FWPAGE,        // page fault on write
+- FRPAGE,        // page fault on read
+- USER 　　　　      // user mode exception 
 
+### 设置中断向量
+ - val --> a
+ - IVEC // 如果在内核态，设置中断向量的地址ivec为a; 如果在用户态，产生FPRIV异常
 
+### 中断/异常产生的处理
+ - 如果终端产生了键盘输入，且iean=1，则ipend |= FKEYBD，0-->iena
+ - 如果timer产生了timeout，且iean=1，则ipend |= FTIMER，0-->iena
+ - 如果产生了其他异常，则会有相应的处理，
+ 
+ 然后，保存中断的地址到kkernel mode的sp中，pc会跳到中断向量的地址ivec处执行
+ 
+　
 ## CPU执行过程
+### 一些变量的含义：
+主要集中在em.c的cpu()函数中
+
+ - a: a寄存器
+ - b: b寄存器
+ - c: c寄存器
+ - f: f浮点寄存器
+ - g: g浮点寄存器
+ - ir:　指令寄存器
+ - xpc: pc在host内存中的值
+ - fpc: pc在host内存中所在页的下一页的起始地址值
+ - tpc: pc在host内存中所在页的起始地址值
+ - xsp: sp在host内存中的值
+ - tsp: sp在host内存中所在页的起始地址值
+ - fsp: 辅助判断是否要经过tr/tw的分析
+ - ssp:
+ - usp:
+ - cycle: 
+ - xcycle:
+ - timer:
+ - timeout:
+ -　detla:
+ 
+ ###执行过程概述
+ 
+ 1. 首先，读入os kernel文件到内存的底部，并把pc放置到os kernel文件指定的内存位置，
+ 设置可用sp为　MEM_SZ-FS_SZ=124MB
+ 1. 然后从os kernel文件的起始地址开始执行
+ 1. 如果碰到异常或中断，则保存中断的地址，并跳到中断向量的地址ivec处执行
