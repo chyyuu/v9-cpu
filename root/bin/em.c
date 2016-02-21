@@ -9,7 +9,7 @@
 #include <u.h>
 #include <libc.h>
 #include <libm.h>
-#include <net.h>
+#include <dir.h>
 
 enum {
   MEM_SZ = 128*1024*1024, // default memory size of virtual machine (128M)
@@ -139,7 +139,7 @@ void cpu(uint pc, uint sp)
   int ir, *xpc, kbchar;
   char ch;
   struct pollfd pfd;
-  struct sockaddr_in addr;
+
   static char rbuf[4096]; // XXX
   
   a = b = c = timer = timeout = fpc = tsp = fsp = 0;
@@ -620,58 +620,7 @@ next:
     
     case LUSP: if (user) { trap = FPRIV; break; } a = usp; continue;
     case SUSP: if (user) { trap = FPRIV; break; } usp = a; continue;
-    
-    // networking -- XXX HACK CODE (and all wrong), but it gets some basic networking going...
-    case NET1: if (user) { trap = FPRIV; break; } a = socket(a, b, c); continue; // XXX
-    case NET2: if (user) { trap = FPRIV; break; } a = close(a); continue; // XXX does this block?
-    case NET3: if (user) { trap = FPRIV; break; }
-      memset(&addr, 0, sizeof(addr));
-      addr.sin_family = b & 0xFFFF;
-      addr.sin_port = b >> 16;
-      addr.sin_addr.s_addr = c;
-      a = connect(a, (struct sockaddr *) &addr, sizeof(struct sockaddr_in)); // XXX needs to be non-blocking
-      continue;
-    case NET4: if (user) { trap = FPRIV; break; }
-      t = 0;
-      // XXX if ((unknown || !ready) && !poll()) return -1;
-      if ((int)c > 0) { if ((int)c > sizeof(rbuf)) c = sizeof(rbuf); a = c = read(a, rbuf, c); } else a = 0; // XXX uint or int??
-      while ((int)c > 0) { 
-        if (!(p = tw[b >> 12]) && !(p = wlook(b))) { dprintf(2,"unstable!!"); exit(9); } //goto exception; } XXX
-        if ((u = 4096 - (b & 4095)) > c) u = c;
-        memcpy((char *)(b ^ p & -2), &rbuf[t], u);
-        t += u; b += u; c -= u;
-      }
-      continue;
-    case NET5: if (user) { trap = FPRIV; break; }
-      t = c;
-      // XXX if ((unknown || !ready) && !poll()) return -1;
-      while ((int)c > 0) {
-        if (!(p = tr[b >> 12]) && !(p = rlook(b))) goto exception;
-        if ((u = 4096 - (b & 4095)) > c) u = c;
-        if ((int)(u = write(a, (char *)(b ^ p & -2), u)) > 0) { b += u; c -= u; } else { t = u; break; }
-      }
-      a = t;
-      continue;
-    case NET6: if (user) { trap = FPRIV; break; }
-      pfd.fd = a;
-      pfd.events = POLLIN;
-      a = poll(&pfd, 1, 0); // XXX do something completely different
-      continue;
-    case NET7: if (user) { trap = FPRIV; break; }
-      memset(&addr, 0, sizeof(addr));
-      addr.sin_family = b & 0xFFFF;
-      addr.sin_port = b >> 16;
-      addr.sin_addr.s_addr = c;
-      a = bind(a, (struct sockaddr *) &addr, sizeof(struct sockaddr_in));
-      continue;
-    case NET8: if (user) { trap = FPRIV; break; }
-      a = listen(a, b);
-      continue;
-    case NET9: if (user) { trap = FPRIV; break; }
-      // XXX if ((unknown || !ready) && !poll()) return -1;
-      a = accept(a, (void *)b, (void *)c); // XXX cant do this with virtual addresses!!!
-      continue;
-    
+
     default: trap = FINST; break;
     }
 exception:

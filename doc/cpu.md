@@ -139,20 +139,6 @@ b = *(uint/short/ushort/char/uchar/double/float *)addr
 - MSIZ, // a = memsz -- move physical memory to a.
 - PSHG, POPG, // (sp -= 8, *sp = g)/(g = *sp, sp += 8)
 
-
-### network
-- NET1, // a = socket(a, b, c)
-- NET2, // a = close(a)
-- NET3, // a = connect(a, addr(b, c), sizeof(addr)); addr.sin_family = b & 0xFFFF;
-           addr.sin_port = b >> 16; addr.sin_addr.s_addr = c;
-- NET4, // a = read(a, b, c)
-- NET5, // a = write(a, b, c)
-- NET6, // a = poll(&pfd(a), 1, 0); pfd.fd = a; pfd.events = POLLIN;
-- NET7, // a = bind(a, addr(b, c), sizeof(addr)); addr.sin_family = b & 0xFFFF;
-           addr.sin_port = b >> 16; addr.sin_addr.s_addr = c;
-- NET8, // a = listen(a, b)
-- NET9, // a = accept(a, b, c);
-
 ### math 
 f = fx(f)/fx(f, g)
 
