@@ -58,6 +58,9 @@ uint verbose,    // chatty option -v
 
 char *cmd;       // command name
 
+static int dbg;  // debugger enable flag
+static char dbgbuf[0x200];
+
 void *new(int size)
 {
   void *p;
@@ -132,6 +135,49 @@ uint wlook(uint v)
   return 0;
 }
 
+static char dbg_getcmd(char *buf)
+{
+  char c;
+  char *pos = buf;
+
+  printf("\ndbg => ");
+  fflush(stdout);
+  fflush(stdin);
+  fflush(stderr);
+
+  do { 
+    c = getchar();
+    putchar(c);
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n' && c != EOF)
+      *pos++ = c;
+  } while(c != EOF && c != '\n' && c != '\r');
+
+    return buf[0];
+}
+
+static char *DBG_HELP_STRING = "\n"
+	"h:\tprint help commands.\n"
+	"q:\tquit.\n"
+	"c:\tcontinue.\n"
+	"s:\tsingle step for one instruction.\n"
+	"i:\tdisplay registers.\n"
+	"x:\tdisplay memory, the input address is hex number (e.g x 10000)\n";
+
+static char *DBG_REG_CONTEX = "\n"
+	"ra:\t%x\n"
+	"rb:\t%x\n"
+	"rc:\t%x\n"
+	"rd:\t%8.8x\t[cur sp]\n"
+	"re:\t%8.8x\t[next pc]\n"
+	"ff:\t%f\n"
+	"fg:\t%f\n\n"
+	"tsp:\t%8.8x\t[top sp]\n"
+        "user:\t%x\t\t[user mode or not]\n"
+        "iena:\t%x\t\t[interrupt flag]\n"
+        "trap:\t%x\t\t[current trap]\n"
+        "vmem:\t%x\t\t[virtual memory enabled or not]\n\n"
+        "ipend:\t%8.8x\t[interrupted pending or not]\n\n";
+
 void cpu(uint pc, uint sp)
 {
   uint a, b, c, ssp, usp, t, p, v, u, delta, cycle, xcycle, timer, timeout, fpc, tpc, xsp, tsp, fsp;
@@ -189,7 +235,40 @@ next:
         }
       }
     }
-    switch ((uchar)(ir = *xpc++)) {
+
+    ir = *xpc++;
+
+    if (dbg) {
+    again:
+      switch(dbg_getcmd(dbgbuf)) {
+      case 'c':
+        dbg = 0;
+        break;
+      case 's':
+        printf("[%8.8x] %lx\n", (uint)xpc - tpc, *xpc);
+        break;
+      case 'q':
+        exit(0);
+      case 'i':
+        printf(DBG_REG_CONTEX,
+               a, b, c, xsp - tsp, (uint)xpc - tpc, f, g,
+               (user ? usp : ssp) - tsp, user, iena, trap, paging, ipend);
+        goto again;
+      case 'x':
+        if((sscanf(dbgbuf + 1, "%x", &u) != 1)
+           || (!(t = tr[u >> 12]) && !(t = rlook(u))))
+          printf("\ninvalid address: %s.\n", dbgbuf + 1);
+        else
+          printf("\n[%8.8x]: %2.2x\n", u, *((unsigned char *)(u ^ (t & -2))));
+        goto again;
+      case 'h':
+      default:
+        printf(DBG_HELP_STRING);
+        goto again;
+      }
+    }
+
+    switch ((uchar)ir) {
     case HALT: if (user || verbose) dprintf(2,"halt(%d) cycle = %u\n", a, cycle + (int)((uint)xpc - xcycle)/4); return; // XXX should be supervisor!
     case IDLE: if (user) { trap = FPRIV; break; }
       if (!iena) { trap = FINST; break; } // XXX this will be fatal !!!
@@ -642,7 +721,7 @@ fatal:
 
 void usage()
 {
-  dprintf(2,"%s : usage: %s [-v] [-m memsize] [-f filesys] file\n", cmd, cmd);
+  dprintf(2,"%s : usage: %s [-g] [-v] [-m memsize] [-f filesys] file\n", cmd, cmd);
   exit(-1);
 }
 
@@ -658,8 +737,11 @@ int main(int argc, char *argv[])
   file = *argv;
   memsz = MEM_SZ;
   fs = 0;
+  dbg = 0;
+  verbose = 0;
   while (--argc && *file == '-') {
     switch(file[1]) {
+    case 'g': dbg = 1; break;
     case 'v': verbose = 1; break;
     case 'm': memsz = atoi(*++argv) * (1024 * 1024); argc--; break;
     case 'f': fs = *++argv; argc--; break;
@@ -668,6 +750,7 @@ int main(int argc, char *argv[])
     file = *++argv;
   }
 
+  if (dbg) dprintf(2,"in debuger mode\n");
   if (verbose) dprintf(2,"mem size = %u\n",memsz);
   mem = (((int) new(memsz + 4096)) + 4095) & -4096;
 
