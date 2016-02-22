@@ -145,7 +145,7 @@ enum {
 };
 
 // tokens and node types ( >= 128 so not to collide with ascii-valued tokens)
-enum {
+typedef enum {
   Num = 128, // low ordering of Num and Auto needed by nodc()
 
   // keyword grouping needed by main()  XXX missing extern and register
@@ -172,7 +172,7 @@ enum {
   Add, Sub,
   Mul, Div, Mod,
   Inc, Dec, Dot, Arrow, Brak, Paren
-};
+}TOKEN;
 
 void *new(int size)
 {
@@ -709,7 +709,7 @@ void stmt();
 void node(int n, int *a, int *b);
 void cast(uint t);
 
-void decl(bc)
+void decl(TOKEN bc)
 {
   int sc, size, align, hglo, *b, *c = 0; uint bt, t; ident_t *v; loc_t *sp;
 
