@@ -27,7 +27,7 @@ enum {           // page table entry flags
 };
 
 enum {           // processor fault codes (some can be masked together)
-  FMEM,          // bad physical address 
+  FMEM,          // bad physical address
   FTIMER,        // timer interrupt
   FKEYBD,        // keyboard interrupt
   FPRIV,         // privileged instruction
@@ -37,7 +37,7 @@ enum {           // processor fault codes (some can be masked together)
   FIPAGE,        // page fault on opcode fetch
   FWPAGE,        // page fault on write
   FRPAGE,        // page fault on read
-  USER = 16      // user mode exception 
+  USER = 16      // user mode exception
 };
 
 uint verbose,    // chatty option -v
@@ -65,14 +65,14 @@ void *new(int size)
   return (void *)(((int)p + 7) & -8);
 }
 
-flush()
+void flush()
 {
-  uint v; 
+  uint v;
 //  static int xx; if (tpages >= xx) { xx = tpages; dprintf(2,"****** flush(%d)\n",tpages); }
 //  if (verbose) printf("F(%d)",tpages);
   while (tpages) {
     v = tpage[--tpages];
-    trk[v] = twk[v] = tru[v] = twu[v] = 0;    
+    trk[v] = twk[v] = tru[v] = twu[v] = 0;
   }
 }
 
@@ -91,7 +91,7 @@ uint setpage(uint v, uint p, uint writable, uint userable)
   twu[v] = (userable && writable) ? p : 0;
   return p;
 }
-  
+
 uint rlook(uint v)
 {
   uint pde, *ppde, pte, *ppte, q, userable;
@@ -141,18 +141,18 @@ void cpu(uint pc, uint sp)
   struct pollfd pfd;
 
   static char rbuf[4096]; // XXX
-  
+
   a = b = c = timer = timeout = fpc = tsp = fsp = 0;
-  cycle = delta = 4096; 
+  cycle = delta = 4096;
   xcycle = delta * 4;
   kbchar = -1;
   xpc = 0;
   tpc = -pc;
   xsp = sp;
   goto fixpc;
-  
+
 fixsp:
-  if (p = tw[(v = xsp - tsp) >> 12]) {
+  if ((p = tw[(v = xsp - tsp) >> 12])) {
     tsp = (xsp = v ^ (p-1)) - v;
     fsp = (4096 - (xsp & 4095)) << 8;
   }
@@ -182,14 +182,14 @@ next:
           timer += delta;
           if (timer >= timeout) { // XXX  // any interrupt actually!
 //          dprintf(2,"timeout! timer=%d, timeout=%d\n",timer,timeout);
-            timer = 0;      
+            timer = 0;
             if (iena) { trap = FTIMER; iena = 0; goto interrupt; }
             ipend |= FTIMER;
           }
         }
       }
     }
-    switch ((uchar)(ir = *xpc++)) {    
+    switch ((uchar)(ir = *xpc++)) {
     case HALT: if (user || verbose) dprintf(2,"halt(%d) cycle = %u\n", a, cycle + (int)((uint)xpc - xcycle)/4); return; // XXX should be supervisor!
     case IDLE: if (user) { trap = FPRIV; break; }
       if (!iena) { trap = FINST; break; } // XXX this will be fatal !!!
@@ -199,7 +199,7 @@ next:
         if (poll(&pfd, 1, 0) == 1 && read(0, &ch, 1) == 1) {
           kbchar = ch;
           if (kbchar == '`') { dprintf(2,"ungraceful exit. cycle = %u\n", cycle + (int)((uint)xpc - xcycle)/4); return; }
-          trap = FKEYBD; 
+          trap = FKEYBD;
           iena = 0;
           goto interrupt;
         }
@@ -208,7 +208,7 @@ next:
           timer += delta;
           if (timer >= timeout) { // XXX  // any interrupt actually!
 //        dprintf(2,"IDLE timeout! timer=%d, timeout=%d\n",timer,timeout);
-            timer = 0;      
+            timer = 0;
             trap = FTIMER;
             iena = 0;
             goto interrupt;
@@ -236,7 +236,7 @@ next:
         if (!(p = tr[a >> 12]) && !(p = rlook(a))) goto exception;
         if ((v = 4096 - (a & 4095)) > c) v = c;
         if ((u = 4096 - (b & 4095)) > v) u = v;
-        if (t = memcmp((char *)(a ^ (p & -2)), (char *)(b ^ (t & -2)), u)) { a = t; b += c; c = 0; break; }
+        if ((t = memcmp((char *)(a ^ (p & -2)), (char *)(b ^ (t & -2)), u))) { a = t; b += c; c = 0; break; }
         a += u; b += u; c -= u;
 //        if (!(++cycle % DELTA)) { pc -= 4; break; } XXX
       }
@@ -247,7 +247,7 @@ next:
         if (!c) { a = 0; break; }
         if (!(p = tr[a >> 12]) && !(p = rlook(a))) goto exception;
         if ((u = 4096 - (a & 4095)) > c) u = c;
-        if (t = (uint)memchr((char *)(v = a ^ (p & -2)), b, u)) { a += t - v; c = 0; break; } 
+        if ((t = (uint)memchr((char *)(v = a ^ (p & -2)), b, u))) { a += t - v; c = 0; break; }
         a += u; c -= u;
 //        if (!(++cycle % DELTA)) { pc -= 4; break; } XXX
       }
@@ -288,7 +288,7 @@ next:
     case ENT:  if (fsp && (fsp -= ir & -256) > 4096<<8) fsp = 0; xsp += ir>>8; if (fsp) continue; goto fixsp;
     case LEV:  if (ir < fsp) { t = *(uint *)(xsp + (ir>>8)) + tpc; fsp -= (ir + 0x800) & -256; } // XXX revisit this mess
                else { if (!(p = tr[(v = xsp - tsp + (ir>>8)) >> 12]) && !(p = rlook(v))) break; t = *(uint *)((v ^ p) & -8) + tpc; fsp = 0; }
-               xsp += (ir>>8) + 8; xcycle += t - (uint)xpc; if ((uint)(xpc = (uint *)t) - fpc < -4096) goto fixpc; goto next;
+               xsp += (ir>>8) + 8; xcycle += t - (uint)xpc; if ((uint)(xpc = (int *)t) - fpc < -4096) goto fixpc; goto next;
 
     // jump
     case JMP:  xcycle += ir>>8; if ((uint)(xpc += ir>>10) - fpc < -4096) goto fixpc; goto next;
@@ -298,8 +298,8 @@ next:
                else { if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(uint *)((v ^ p) & -8) = (uint)xpc - tpc; fsp = 0; xsp -= 8; }
                xcycle += ir>>8; if ((uint)(xpc += ir>>10) - fpc < -4096) goto fixpc; goto next;
     case JSRA: if (fsp & (4095<<8)) { xsp -= 8; fsp += 8<<8; *(uint *)xsp = (uint)xpc - tpc; }
-               else { if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(uint *)((v ^ p) & -8) = (uint)xpc - tpc; fsp = 0; xsp -= 8; }    
-               xcycle += a + tpc - (uint)xpc; if ((uint)(xpc = (uint *)(a + tpc)) - fpc < -4096) goto fixpc; goto next;
+               else { if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(uint *)((v ^ p) & -8) = (uint)xpc - tpc; fsp = 0; xsp -= 8; }
+               xcycle += a + tpc - (uint)xpc; if ((uint)(xpc = (int *)(a + tpc)) - fpc < -4096) goto fixpc; goto next;
 
     // stack
     case PSHA: if (fsp & (4095<<8)) { xsp -= 8; fsp += 8<<8; *(uint *)xsp = a; continue; }
@@ -313,7 +313,7 @@ next:
     case PSHG: if (fsp & (4095<<8)) { xsp -= 8; fsp += 8<<8; *(double *)xsp = g; continue; }
                if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(double *) ((v ^ p) & -8) = g;     xsp -= 8; fsp = 0; goto fixsp;
     case PSHI: if (fsp & (4095<<8)) { xsp -= 8; fsp += 8<<8; *(int *)xsp = ir>>8; continue; }
-               if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(int *)    ((v ^ p) & -8) = ir>>8; xsp -= 8; fsp = 0; goto fixsp;    
+               if (!(p = tw[(v = xsp - tsp - 8) >> 12]) && !(p = wlook(v))) break; *(int *)    ((v ^ p) & -8) = ir>>8; xsp -= 8; fsp = 0; goto fixsp;
 
     case POPA: if (fsp) { a = *(uint *)xsp; xsp += 8; fsp -= 8<<8; continue; }
                if (!(p = tr[(v = xsp - tsp) >> 12]) && !(p = rlook(v))) break; a = *(uint *)   ((v ^ p) & -8); xsp += 8; goto fixsp;
@@ -327,7 +327,7 @@ next:
                if (!(p = tr[(v = xsp - tsp) >> 12]) && !(p = rlook(v))) break; g = *(double *) ((v ^ p) & -8); xsp += 8; goto fixsp;
 
     // load effective address
-    case LEA:  a = xsp - tsp + (ir>>8); continue; 
+    case LEA:  a = xsp - tsp + (ir>>8); continue;
     case LEAG: a = (uint)xpc - tpc + (ir>>8); continue;
 
     // load a local
@@ -461,7 +461,7 @@ next:
     case SXB:  if (!(p = tw[(v = b + (ir>>8)) >> 12]) && !(p = wlook(v))) break; *(uchar *)  (v ^ p & -2)   = a; continue;
     case SXD:  if (!(p = tw[(v = b + (ir>>8)) >> 12]) && !(p = wlook(v))) break; *(double *) ((v ^ p) & -8) = f; continue;
     case SXF:  if (!(p = tw[(v = b + (ir>>8)) >> 12]) && !(p = wlook(v))) break; *(float *)  ((v ^ p) & -4) = f; continue;
-      
+
     // arithmetic
     case ADDF: f += g; continue;
     case SUBF: f -= g; continue;
@@ -526,7 +526,7 @@ next:
     case XORI: a ^= ir>>8; continue;
     case XORL: if (ir < fsp) { a ^= *(uint *)(xsp + (ir>>8)); continue; }
                if (!(p = tr[(v = xsp - tsp + (ir>>8)) >> 12]) && !(p = rlook(v))) break; a ^= *(uint *)((v ^ p) & -4);
-               if (fsp || (v ^ (xsp - tsp)) & -4096) continue; goto fixsp;
+               if ((fsp || (v ^ (xsp - tsp)) & -4096)) continue; goto fixsp;
 
     case SHL:  a <<= b; continue;
     case SHLI: a <<= ir>>8; continue;
@@ -573,7 +573,7 @@ next:
     case BGE:  if ((int)a >= (int)b) { xcycle += ir>>8; if ((uint)(xpc += ir>>10) - fpc < -4096) goto fixpc; goto next; } continue;
     case BGEU: if (a >= b)           { xcycle += ir>>8; if ((uint)(xpc += ir>>10) - fpc < -4096) goto fixpc; goto next; } continue;
     case BGEF: if (f >= g)           { xcycle += ir>>8; if ((uint)(xpc += ir>>10) - fpc < -4096) goto fixpc; goto next; } continue;
-    
+
     // conversion
     case CID:  f = (int)a; continue;
     case CUD:  f = a; continue;
@@ -588,7 +588,7 @@ next:
     case NOP:  continue;
     case CYC:  a = cycle + (int)((uint)xpc - xcycle)/4; continue; // XXX protected?  XXX also need wall clock time instruction
     case MSIZ: if (user) { trap = FPRIV; break; } a = memsz; continue;
-    
+
     case CLI:  if (user) { trap = FPRIV; break; } a = iena; iena = 0; continue;
     case STI:  if (user) { trap = FPRIV; break; } if (ipend) { trap = ipend & -ipend; ipend ^= trap; iena = 0; goto interrupt; } iena = 1; continue;
 
@@ -599,7 +599,7 @@ next:
       t = *(uint *)((xsp ^ p) & -8); xsp += 8;
       if (!(p = tr[xsp >> 12]) && !(p = rlook(xsp))) { dprintf(2,"RTI kstack fault\n"); goto fatal; }
       xcycle += (pc = *(uint *)((xsp ^ p) & -8) + tpc) - (uint)xpc; xsp += 8;
-      xpc = (uint *)pc;
+      xpc = (int *)pc;
       if (t & USER) { ssp = xsp; xsp = usp; user = 1; tr = tru; tw = twu; }
       if (!iena) { if (ipend) { trap = ipend & -ipend; ipend ^= trap; goto interrupt; } iena = 1; }
       goto fixpc; // page may be invalid
@@ -607,17 +607,17 @@ next:
     case IVEC: if (user) { trap = FPRIV; break; } ivec = a; continue;
     case PDIR: if (user) { trap = FPRIV; break; } if (a > memsz) { trap = FMEM; break; } pdir = (mem + a) & -4096; flush(); fsp = 0; goto fixpc; // set page directory
     case SPAG: if (user) { trap = FPRIV; break; } if (a && !pdir) { trap = FMEM; break; } paging = a; flush(); fsp = 0; goto fixpc; // enable paging
-    
-    case TIME: if (user) { trap = FPRIV; break; } 
+
+    case TIME: if (user) { trap = FPRIV; break; }
        if (ir>>8) { dprintf(2,"timer%d=%u timeout=%u\n", ir>>8, timer, timeout); continue; }    // XXX undocumented feature!
        timeout = a; continue; // XXX cancel pending interrupts if disabled?
 
     // XXX need some sort of user mode thread locking functions to support user mode semaphores, etc.  atomic test/set?
-    
+
     case LVAD: if (user) { trap = FPRIV; break; } a = vadr; continue;
 
     case TRAP: trap = FSYS; break;
-    
+
     case LUSP: if (user) { trap = FPRIV; break; } a = usp; continue;
     case SUSP: if (user) { trap = FPRIV; break; } usp = a; continue;
 
@@ -640,8 +640,8 @@ fatal:
   dprintf(2,"processor halted! cycle = %u pc = %08x ir = %08x sp = %08x a = %d b = %d c = %d trap = %u\n", cycle + (int)((uint)xpc - xcycle)/4, (uint)xpc - tpc, ir, xsp - tsp, a, b, c, trap);
 }
 
-usage()
-{ 
+void usage()
+{
   dprintf(2,"%s : usage: %s [-v] [-m memsize] [-f filesys] file\n", cmd, cmd);
   exit(-1);
 }
@@ -652,7 +652,7 @@ int main(int argc, char *argv[])
   struct { uint magic, bss, entry, flags; } hdr;
   char *file, *fs;
   struct stat st;
-  
+
   cmd = *argv++;
   if (argc < 2) usage();
   file = *argv;
@@ -667,10 +667,10 @@ int main(int argc, char *argv[])
     }
     file = *++argv;
   }
-  
+
   if (verbose) dprintf(2,"mem size = %u\n",memsz);
   mem = (((int) new(memsz + 4096)) + 4095) & -4096;
-  
+
   if (fs) {
     if (verbose) dprintf(2,"%s : loading ram file system %s\n", cmd, fs);
     if ((f = open(fs, O_RDONLY)) < 0) { dprintf(2,"%s : couldn't open file system %s\n", cmd, fs); return -1; }
@@ -678,13 +678,13 @@ int main(int argc, char *argv[])
     if ((i = read(f, (void*)(mem + memsz - FS_SZ), st.st_size)) != st.st_size) { dprintf(2,"%s : failed to read filesystem size %d returned %d\n", cmd, st.st_size, i); return -1; }
     close(f);
   }
-  
+
   if ((f = open(file, O_RDONLY)) < 0) { dprintf(2,"%s : couldn't open %s\n", cmd, file); return -1; }
   if (fstat(f, &st)) { dprintf(2,"%s : couldn't stat file %s\n", cmd, file); return -1; }
 
   read(f, &hdr, sizeof(hdr));
   if (hdr.magic != 0xC0DEF00D) { dprintf(2,"%s : bad hdr.magic\n", cmd); return -1; }
-  
+
   if (read(f, (void*)mem, st.st_size - sizeof(hdr)) != st.st_size - sizeof(hdr)) { dprintf(2,"%s : failed to read file %sn", cmd, file); return -1; }
   close(f);
 
@@ -702,4 +702,3 @@ int main(int argc, char *argv[])
   cpu(hdr.entry, memsz - FS_SZ);
   return 0;
 }
-
