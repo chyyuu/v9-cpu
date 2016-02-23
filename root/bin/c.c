@@ -207,7 +207,12 @@ void em(int i)
 }
 void emi(int i, int c)
 {
-  if (debug) printf("%08x  %08x%6.4s  %d\n", ip-ts, i | (c << 8), &ops[i*5], c);
+  if (debug) {
+    if (i == 3 || i == 5) //show JMP, JSR
+      printf("%08x  %08x%6.4s  0x%x (TO 0x%x)\n", ip - ts, i | (c << 8), &ops[i * 5], c, ip-ts+c);
+    else
+      printf("%08x  %08x%6.4s  0x%x\n", ip - ts, i | (c << 8), &ops[i * 5], c);
+  }
   if (c<<8>>8 != c) err("emi() constant out of bounds");
   *(int *)ip = i | (c << 8);
   ip += 4;
@@ -2212,7 +2217,7 @@ int main(int argc, char *argv[])
   if (!(amain = tmain->val)) err("main() not defined");
 
   if (verbose || errs) dprintf(2,"%s : %s compiled with %d errors\n", cmd, file, errs);
-  if (verbose) dprintf(2,"entry = %d text = %d data = %d bss = %d\n", amain - ts, text, data, bss);
+  if (verbose) dprintf(2,"entry = 0x%x text = 0x%x data = 0x%x bss = 0x%x\n", amain - ts, text, data, bss);
 
   if (!errs && !debug) {
     while (pdata != patchdata) { pdata--; *(int *)*pdata += (ip        - *pdata - 4) << 8; }
