@@ -7,20 +7,20 @@ out(port, val)
   asm(BOUT);   // output byte to console
 }
 
-write(int f, char *s, int n)
+int write(int f, char *s, int n)
 {
   int i;
   ret = 1;
   i=n;
   while (i--)
     out(f, *s++);
+  return i;
 }  
 
 main()
 {
 
   //Change S1/S2 ID to your student ID, and change 12 to new str length
-  write(1, "S1_ID S2_ID",12);
-  ret= 0;
+  ret = write(1, "S1_ID S2_ID",12);
   asm(HALT);
 }
