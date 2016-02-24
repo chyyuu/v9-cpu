@@ -211,7 +211,7 @@ void emi(int i, int c)
     if (i == 3 || i == 5) //show JMP, JSR
       printf("%08x  %08x%6.4s  0x%x (TO 0x%x)\n", ip - ts, i | (c << 8), &ops[i * 5], c, ip-ts+c+4);
     else
-      printf("%08x  %08x%6.4s  0x%x\n", ip - ts, i | (c << 8), &ops[i * 5], c);
+      printf("%08x  %08x%6.4s  0x%x (D %d)\n", ip - ts, i | (c << 8), &ops[i * 5], c, c);
   }
   if (c<<8>>8 != c) err("emi() constant out of bounds");
   *(int *)ip = i | (c << 8);
