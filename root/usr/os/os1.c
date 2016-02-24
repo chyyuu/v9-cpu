@@ -84,7 +84,7 @@ main()
   
   
   task1_sp -= 2; *task1_sp = &task1;
-  task1_sp -= 2; *task1_sp = 0; // fc
+  task1_sp -= 2; *task1_sp = 0; // fault code
   task1_sp -= 2; *task1_sp = 0; // a  
   task1_sp -= 2; *task1_sp = 0; // b  
   task1_sp -= 2; *task1_sp = 0; // c  
