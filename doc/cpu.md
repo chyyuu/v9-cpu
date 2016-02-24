@@ -25,9 +25,9 @@ v9-cpu是一个假想的简单CPU，用于操作系统教学实验和练习．
  
 ## 指令集
 
-总共有 209 条指令,具体的命令在指令的低 8 位,高 24 位为操作数 0。对于具体的命令,
-其中 4 条既不需要操作数,也不需要当前的 CPU 信息;还有 92 条也不需要操作数,但需要当
-前 CPU 的信息;剩下的 113 条命令,需要一个 24 位的操作数和当前的 CPU 信息。
+总共有209条指令,具体的命令在指令的低8位,高24位为操作数。对于具体的命令,
+其中4条既不需要操作数,也不需要当前的CPU信息;还有92条也不需要操作数,但需要当
+前CPU的信息;剩下的113条命令,需要一个24位的操作数和当前的CPU信息。
 
 整体来看,指令分为三大类:运算比较指令、流程控制指令、装载卸载指令。另外还有其
 他的辅助指令:例如系统命令(例如 HALT,IDLE,RTI,BIN 等)、系统设置(例如 SSP,
@@ -40,8 +40,8 @@ v9-cpu的指令集如下：
 - HALT, // halt system,
 - ENT,// sp += operand0
 - LEV, //  pc= *sp, sp + = operand0+8, 
-- JMP, // jump to operand0
-- JMPI, // jump to operand0 + (a * sizeof(union insnfmt_t))
+- JMP, // jump to operand0 offset, pc+=operand0
+- JMPI, // jump to operand0 + (a * sizeof(union insnfmt_t)) offset, pc+=operand0+a>>2
 - JSR,  // save current pc, *sp=pc, sp -= 8; jump to operand0 OR pc+=operand0. 
 - JSRA, // save current pc, *sp=pc, sp -= 8; jump to a reg,  pc+=(a * sizeof(union insnfmt_t)).
 - LEA, LEAG, // a = sp/pc + operand0
@@ -73,8 +73,8 @@ b = *(uint/short/ushort/char/uchar/double/float *)addr
 *(uint/short/ushort/char/uchar/double/float *)addr = a
 
 - SL, SLH, SLB, SLD, SLF, // *(local_addr)=a; local_addr = operand0 + sp
-- SG, SGH, SGB, SGD, SGF, // *(global_addr)=a; global_addr = operand + pc
-- SX, SXH, SXB, SXD, SXF, // *(virt_addr)=a; virt_addr = vir2phy(operand0)
+- SG, SGH, SGB, SGD, SGF, // *(global_addr)=a; global_addr = operand0 + pc
+- SX, SXH, SXB, SXD, SXF, // *(virt_addr)=a; virt_addr = vir2phy(operand0 + b)
 
 ### arithmetic
 - ADDF, SUBF, MULF, DIVF, // floating point arithmetic: f = fx(f, g)
