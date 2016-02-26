@@ -2,6 +2,7 @@
 *~
 xc
 xem
+dis
 emhello
 emhello.txt
 os0
@@ -9,6 +10,9 @@ os1
 os2
 os3
 build
+funcall
+funcall.s
+funcall.txt
 os*.txt
 backup*
 root/bin/c
