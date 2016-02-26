@@ -1,10 +1,7 @@
-//#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-
-//using namespace std;
 
 char ops[] =
   "HALT,ENT ,LEV ,JMP ,JMPI,JSR ,JSRA,LEA ,LEAG,CYC ,MCPY,MCMP,MCHR,MSET," // system
@@ -31,8 +28,8 @@ char ops[] =
 struct Header {
 	int magic;
 	int bss;
-	int entry;
-	int flags;
+	int entry; // the entry point of execution
+	int flags; // the data segment base addr
 };
 struct Header hdr;
 
@@ -45,15 +42,24 @@ void usage() {
 	printf("  -c : print comments for each instrs\n");
 }
 
+char showChar(int c) {
+	if (c >= 32 && c <= 126)
+		return (char)(c);
+	else
+		return '.';
+}
+
 int main(int argc, char** argv) {
 	char *file_i, *file_o;
+	int i, j;
+	size_t len;
 	
 	if (argc<=1) {
             usage();
 	        exit(1);
 	}
 	
-	for (int i = 1 ; i < argc ; i++) {
+	for (i = 1 ; i < argc ; i++) {
 		if (!strcmp(argv[i], "-help") || !strcmp(argv[i], "-h")){
             usage();
 		} else if (!strcmp(argv[i], "-c"))
@@ -75,17 +81,19 @@ int main(int argc, char** argv) {
             exit(-1);
     }
         	
-	fread(&hdr, 1, sizeof(hdr), fi);
-	printf("magic = 0x%08x\n", hdr.magic);
+	len=fread(&hdr, 1, sizeof(hdr), fi);
+	if(len !=  sizeof(hdr)) {
+		printf("can not read hdr of %s correctly\n",file_i);
+		exit(-1);
+	}
 	if(hdr.magic!=0xc0def00d) {
             printf("%s is not a legal v9-cpu exec file\n",file_i);
             exit(-1);
-    }
-    	
-	printf("bss = %d\n", hdr.bss);
-	int c_sz = (fread(&dat, 1, sizeof(dat), fi)>>2)-(hdr.bss>>1);
+    }    	
+	int d_sz = fread(&dat, 1, sizeof(dat), fi)>>2;
+	int c_sz = (hdr.flags-sizeof(hdr))>>2;
 	int label_sz = 0, label_ct = 0;
-	for (int i = 0 ; i < c_sz ; i++) {
+	for (i = 0 ; i < c_sz ; i++) {
 		int inst = dat[i]&255;
 		int imme = dat[i]>>8;
 		if (ops[inst*5] == 'B' && ops[inst*5+1] != 'I' && ops[inst*5+1] != 'O') {
@@ -99,7 +107,7 @@ int main(int argc, char** argv) {
 	}
 	fprintf(fo, "No.:   Addr:    Value:  Intr  Operand  (Dec Format) #Label_id #Meaning\n");
 	fprintf(fo, "=======================================================================\n");	 
-	for (int i = 0 ; i < c_sz ; i++) {
+	for (i = 0 ; i < c_sz ; i++) {
 		int inst = dat[i]&255;
 		int imme = (int)(((unsigned int)(dat[i]))>>8);
 		fprintf(fo, "%3d: %08x: %08x: %c%c%c%c 0x%06x (D%4d)",
@@ -108,7 +116,7 @@ int main(int argc, char** argv) {
 			imme, dat[i]>>8
 		);
 		if (i == hdr.entry>>2)
-			fprintf(fo, " # <= ENTRY ");
+			fprintf(fo, " # <=ENTRY");
 		if (label[i])
 			fprintf(fo, " # label%d ", label[i]);
 		else
@@ -117,9 +125,9 @@ int main(int argc, char** argv) {
 			fprintf(fo, " # Cond goto label%d", ++label_ct);
 		else if (ops[inst*5] == 'J') {
 		        if(ops[inst*5+1] == 'M') {
-			        fprintf(fo, " # Jmp label%d", ++label_ct);
+			        fprintf(fo, " # Jmp label%d 0x%x=pc+%d", ++label_ct, (i<<2)+imme, dat[i]>>8);
 			    } else if(ops[inst*5+1] == 'S') {
-			        fprintf(fo, " # Call label%d", ++label_ct);
+			        fprintf(fo, " # Call label%d 0x%x=pc+%d", ++label_ct, (i<<2)+imme, dat[i]>>8);
 			    }
 		}	    
 		if (!cmt) {
@@ -170,9 +178,32 @@ int main(int argc, char** argv) {
 				}
 			}
 		}
+		if (ops[inst*5] == 'B') {
+			if (ops[inst*5+1] == 'I')
+				fprintf(fo, " # ra = kbchar, kbchar is the value from outside IO\n");
+			if (ops[inst*5+1] == 'O') 
+				fprintf(fo, " # write(ra, &rb, 1)");
+		}
+		if (ops[inst*5] == 'C') {
+			if (ops[inst*5+2] == 'D') {
+				fprintf(fo, " # rf = ");
+				if (ops[inst*5+1] == 'I') 
+					fprintf(fo, "double(int(ra))");
+				else
+					fprintf(fo, "double(uint(ra))");
+			}
+			if (ops[inst*5+1] == 'D') {
+				fprintf(fo, " # ra = ");
+				if (ops[inst*5+2] == 'I') 
+					fprintf(fo, "int(rf)");
+				else
+					fprintf(fo, "uint(ra)");
+			}
+		}
 		if (ops[inst*5] == 'L') {
 			if (ops[inst*5+2] == 'V') {
-				fprintf(fo, "\n"); continue;
+				fprintf(fo, " # sp += %d and return \n", imme); 
+				continue;
 			}
 			if (ops[inst*5+1] == 'E') {
 				if (ops[inst*5+3] == 'G') 
@@ -198,10 +229,15 @@ int main(int argc, char** argv) {
 				case 'F' : fprintf(fo, "float("); break;
 			}
 			switch (ops[opi]) {
-				case 'L' : fprintf(fo, "sp[%d])",    imme); break;
-				case 'G' : fprintf(fo, "gaddr[%d])", imme); break;
-				case 'X' : fprintf(fo, "v2p(%x06d))",imme); break;
-				case 'I' : fprintf(fo, "%d)", 		 imme); break;
+				case 'L' : fprintf(fo, "sp[0x%x=%d])",  imme,  imme); break;
+				case 'G' : fprintf(fo, "gaddr[0x%x=%d=pc+%d])", (i<<2)+imme, (i<<2)+imme, imme); break;
+				case 'X' : 
+					if (opi == inst*5+1)
+						fprintf(fo, "ra[0x%x=%d])", imme, imme);
+					else
+						fprintf(fo, "rb[0x%x=%d])", imme, imme);
+					break;break;
+				case 'I' : fprintf(fo, "0x%x=%d)",  imme, imme); break;
 			}
 		}
 		if (ops[inst*5] == 'S') {
@@ -221,15 +257,67 @@ int main(int argc, char** argv) {
 				case 'F' : fprintf(fo, "float("); break;
 			}
 			switch (ops[opi]) {
-				case 'L' : fprintf(fo, "sp[%d])",    imme); break;
-				case 'G' : fprintf(fo, "gaddr[%d])", imme); break;
-				case 'X' : fprintf(fo, "v2p(%x06d))",imme); break;
+				case 'L' : fprintf(fo, "sp[0x%x=%d])",   imme, imme); break;
+				case 'G' : fprintf(fo, "gaddr[0x%x=%d=pc+%d])", (i<<2)+imme, (i<<2)+imme, imme); break;
+				case 'X' : 
+					if (opi == inst*5+1)
+						fprintf(fo, "ra[0x%x=%d])", imme, imme);
+					else
+						fprintf(fo, "rb[0x%x=%d])", imme, imme);
+					break;
 			}
 			if (opi == inst*5+2)
 				fprintf(fo, " = rb");
 			else
 				fprintf(fo, " = ra");
 		}
+		if (ops[inst*5] == 'P') {
+			if (ops[inst*5+1] == 'S' && ops[inst*5+2] == 'H') {
+				switch (ops[inst*5+3]) {
+					case 'A' : fprintf(fo, " # push ra"); break;
+					case 'I' : fprintf(fo, " # push 0x%x=%d", imme, imme);break;
+					case 'F' : fprintf(fo, " # push rf"); break;
+					case 'B' : fprintf(fo, " # push rb"); break;
+					case 'C' : fprintf(fo, " # push rc"); break;
+					case 'G' : fprintf(fo, " # push rg"); break;
+				}
+			}
+			if (ops[inst*5+1] == 'O' && ops[inst*5+2] == 'P') {
+				switch (ops[inst*5+3]) {
+					case 'A' : fprintf(fo, " # pop ra"); break;
+					case 'F' : fprintf(fo, " # pop rf"); break;
+					case 'B' : fprintf(fo, " # pop rb"); break;
+					case 'C' : fprintf(fo, " # pop rc"); break;
+					case 'G' : fprintf(fo, " # pop rg"); break;
+				}
+			}
+		}
+		if (ops[inst*5] == 'E' && ops[inst*5+1] == 'N') 
+			fprintf(fo, " # sp += 0x%x=%d\n", imme, dat[i]>>8);
+		fprintf(fo, "\n");
+	}
+	fprintf(fo, "=======================================================================\n");
+	fprintf(fo, "Data Segment\n");
+	fprintf(fo, "Address     Hex									 | Char\n");
+	for (i = c_sz ; i < d_sz ; i += 4) {
+		fprintf(fo, "0x%08x	", i<<2);
+		for (j = i ; j < i+4 ; j++)
+			if (j < d_sz) 
+				fprintf(fo, "%02x %02x %02x %02x	", 
+					dat[j]&255, (dat[j]>>8)&255, (dat[j]>>16)&255, dat[j]>>24) ;
+			else
+				fprintf(fo, "                   	");
+		fprintf(fo, " | ");
+		for (j = i ; j < i+4 ; j++)
+			if (j < d_sz)
+				fprintf(fo, "%c%c%c%c", 
+					showChar(dat[j]&255),
+					showChar((dat[j]>>8)&255),
+					showChar((dat[j]>>16)&255),
+					showChar(dat[j]>>24)
+				);
+			else
+				fprintf(fo, "    ");
 		fprintf(fo, "\n");
 	}
 	return 0;

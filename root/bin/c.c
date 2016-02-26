@@ -2228,7 +2228,7 @@ int main(int argc, char *argv[])
       hdr.magic = 0xC0DEF00D;
       hdr.bss   = bss;
       hdr.entry = amain - ts;
-      hdr.flags = 0;
+      hdr.flags = sizeof(hdr)+text;
       write(i, &hdr, sizeof(hdr));
       write(i, (void *) ts, text);
       write(i, (void *) gs, data);
