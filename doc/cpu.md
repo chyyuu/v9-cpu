@@ -1,27 +1,61 @@
-##================================================================================================
-#							v9-cpu
-##概述	============================================================================================
-v9-cpu 是一个假想的简单CPU，用于操作系统教学实验和练习．
-##寄存器==========================================================================================
-v9-cpu 有以下寄存器：
-	>	3 个 32位 的通用寄存器   ra, rb, rc
-	>	2 个 64位 的浮点寄存器   rf, rg
-	>	2 个 32位 的栈指针寄存器 sp, tsp
-			sp  : 当前栈指针
-			tsp : 栈顶指针
-	>	1 个	 32位 的PC寄存器		pc
-	>	1 个 32位 的状态寄存器	flags
-			flags[0] 	user	:	内核态为0，用户态为1
-			flags[1] 	iena	:	中断使能
-			flags[2..5] trap	:	异常/错误编码
-			flags[6]	paging	:	页模式使能
-此外，相关的外设硬件配套在此不做介绍。
-##指令集==========================================================================================
-v9-cpu指令集的指令格式：
-	0xiiiiiiitt
-其中 i 为24位的立即数，t 为8位的指令编号。
-v9-cpu指令集共有以下209种指令：
-###-----	system	--------------------------------------------------------------------------------
+# v9-cpu
+
+## 概述
+v9-cpu是一个假想的简单CPU，用于操作系统教学实验和练习．
+
+## 寄存器组:
+总共有 9 个寄存器,其中 7 个为 32 位,2 个为 64 位(浮点寄存器)。本文档只针对 CPU
+进行描述,对于相关的硬件配套外设(例如中断控制器等)在此不做介绍。其中：
+
+ - a, b, c : 三个通用寄存器
+ - f, g 两个浮点寄存器,是用来进行各种指令操作的。
+ - sp 为当前栈指针
+ - pc 为程序计数器（指向下一条指令），其指向的内存内容（即具体的指令值）会放到ir中，给CPU解码并执行
+ - tsp 为栈顶指针(本 CPU 的栈是从顶部往底部增长)
+ - flags 为状态寄存器(包括当前的运行模式,是否中断使能,是否有自陷,以及是否使用虚拟地址等)。
+ 
+ 
+
+### flags寄存器标志位
+ - user   : 1; 用户态或内核态(user mode or not.)
+ - iena   : 1; 中断使能/失效 (interrupt flag.)
+ - trap   : 1; 异常/错误编码 (fault code.)
+ - paging : 1; 页模式使能/失效（ virtual memory enabled or not.）
+
+ 
+## 指令集
+
+总共有209条指令,一条指令大小为32bit, 具体的命令编码在指令的低8位,高24位为操作数。
+但很多指令只是某一类指令的多种形式，很容易触类旁通。
+
+整体来看,指令分为如下几类:
+
+ - 运算指令：如ADD, SUB等
+ - 跳转指令：如JMP, JSR，LEV等
+ - 访存（Load/Store）指令：如LL, LBL, SL等
+ - 系统命令:如HALT, RTI, IDLE，SSP, USP,IVEC, PDIR，目的是为了操作系统设计
+ - 扩展函数库命令：如MCPY/MCMP/MCHR/MSET, MATH类，NET类，目的为了简化编译器设计
+
+按照指令对条件的需求，指令可分类如下：
+
+ - HALT, RTI, IDLE等，不需要立即数来参与，也不需要读取或修改寄存器值。
+ - ADD, MCPY，PSHA等，不需要立即数来参与，但需要读取或修改寄存器值。
+ - ADDI, S/L系列，B系列等，需要立即数和寄存器来参与。
+ 
+
+
+v9-cpu的指令集如下：
+
+
+### 显示格式
+```
+指令名字　指令值　　指令含义
+```
+
+### 指令集明细
+
+#### system
+```
 HALT	0xiiiiii00	halt system
 ENT		0xiiiiii01  sp += imme
 LEV		0xiiiiii02  pc =  *sp,	sp += imme+8
@@ -36,7 +70,10 @@ MCPY	0xiiiiii0a	memcpy(ra, rb, rc)
 MCMP	0xiiiiii0b	memcmp(ra, rb, rc)
 MCHR	0xiiiiii0c  memchr(ra, rb, rc)
 MSET	0xiiiiii0d	memset(ra, rb, rc)
-###-----	load to ra	----------------------------------------------------------------------------
+```
+
+#### load to register a
+```
 LL		0xiiiiii0e	ra = *(*unit)  (sp+imme)
 LLS		0xiiiiii0f	ra = *(*short) (sp+imme)
 LLH		0xiiiiii10	ra = *(*ushort)(sp+imme)
@@ -44,24 +81,27 @@ LLC		0xiiiiii11	ra = *(*char)  (sp+imme)
 LLB		0xiiiiii12	ra = *(*uchar) (sp+imme)
 LLD		0xiiiiii13	ra = *(*double)(sp+imme)
 LLF		0xiiiiii14	ra = *(*float) (sp+imme)
-LG		0xiiiiii15	ra = *(*unit)  (BSS+imme)
-LGS		0xiiiiii16	ra = *(*short) (BSS+imme)
-LGH		0xiiiiii17	ra = *(*ushort)(BSS+imme)
-LGC		0xiiiiii18	ra = *(*char)  (BSS+imme)
-LGB		0xiiiiii19	ra = *(*uchar) (BSS+imme)
-LGD		0xiiiiii1a	ra = *(*double)(BSS+imme)
-LGF		0xiiiiii1b	ra = *(*float) (BSS+imme)
-LX		0xiiiiii1c	ra = *(*unit)  conv_to_phy_addr(imme)
-LXS		0xiiiiii1d	ra = *(*short) conv_to_phy_addr(imme)
-LXH		0xiiiiii1e	ra = *(*ushort)conv_to_phy_addr(imme)
-LXC		0xiiiiii1f	ra = *(*char)  conv_to_phy_addr(imme)
-LXB		0xiiiiii20	ra = *(*uchar) conv_to_phy_addr(imme)
-LXD		0xiiiiii21	ra = *(*double)conv_to_phy_addr(imme)
-LXF		0xiiiiii22	ra = *(*float) conv_to_phy_addr(imme)
+LG		0xiiiiii15	ra = *(*unit)  (pc+imme)
+LGS		0xiiiiii16	ra = *(*short) (pc+imme)
+LGH		0xiiiiii17	ra = *(*ushort)(pc+imme)
+LGC		0xiiiiii18	ra = *(*char)  (pc+imme)
+LGB		0xiiiiii19	ra = *(*uchar) (pc+imme)
+LGD		0xiiiiii1a	ra = *(*double)(pc+imme)
+LGF		0xiiiiii1b	ra = *(*float) (pc+imme)
+LX		0xiiiiii1c	ra = *(*unit)  conv_to_phy_addr(ra+imme)
+LXS		0xiiiiii1d	ra = *(*short) conv_to_phy_addr(ra+imme)
+LXH		0xiiiiii1e	ra = *(*ushort)conv_to_phy_addr(ra+imme)
+LXC		0xiiiiii1f	ra = *(*char)  conv_to_phy_addr(ra+imme)
+LXB		0xiiiiii20	ra = *(*uchar) conv_to_phy_addr(ra+imme)
+LXD		0xiiiiii21	ra = *(*double)conv_to_phy_addr(ra+imme)
+LXF		0xiiiiii22	ra = *(*float) conv_to_phy_addr(ra+imme)
 LI		0xiiiiii23	ra = imme
 LHI		0xiiiiii24	ra = (ra<<24)|(imme>>8)
 LIF		0xiiiiii25	rf = double(imme)
-###-----	load to rb	----------------------------------------------------------------------------
+```
+
+#### load to register b
+```
 LBL		0xiiiiii26	rb = *(*uint)  (sp+imme)
 LBLS	0xiiiiii27	rb = *(*short) (sp+imme)
 LBLH	0xiiiiii28	rb = *(*ushort)(sp+imme)
@@ -69,42 +109,48 @@ LBLC	0xiiiiii29	rb = *(*char)  (sp+imme)
 LBLB	0xiiiiii2a	rb = *(*uchar) (sp+imme)
 LBLD	0xiiiiii2b	rb = *(*double)(sp+imme)
 LBLF	0xiiiiii2c	rb = *(*float) (sp+imme)
-LBG		0xiiiiii2d	rb = *(*uint)  (BSS+imme)
-LBGS	0xiiiiii2e	rb = *(*short) (BSS+imme)
-LBGH	0xiiiiii2f	rb = *(*ushort)(BSS+imme)
-LBGC	0xiiiiii30	rb = *(*char)  (BSS+imme)
-LBGB	0xiiiiii31	rb = *(*uchar) (BSS+imme)
-LBGD	0xiiiiii32	rb = *(*double)(BSS+imme)
-LBGF	0xiiiiii33	rb = *(*float) (BSS+imme)
-LBX		0xiiiiii34	rb = *(*uint)  conv_to_phy_addr(imme)
-LBXS	0xiiiiii35	rb = *(*short) conv_to_phy_addr(imme)
-LBXH	0xiiiiii36	rb = *(*ushort)conv_to_phy_addr(imme)
-LBXC	0xiiiiii37	rb = *(*char)  conv_to_phy_addr(imme)
-LBXB	0xiiiiii38	rb = *(*uchar) conv_to_phy_addr(imme)
-LBXD	0xiiiiii39	rb = *(*double)conv_to_phy_addr(imme)
-LBXF	0xiiiiii3a	rb = *(*float) conv_to_phy_addr(imme)
+LBG		0xiiiiii2d	rb = *(*uint)  (pc+imme)
+LBGS	0xiiiiii2e	rb = *(*short) (pc+imme)
+LBGH	0xiiiiii2f	rb = *(*ushort)(pc+imme)
+LBGC	0xiiiiii30	rb = *(*char)  (pc+imme)
+LBGB	0xiiiiii31	rb = *(*uchar) (pc+imme)
+LBGD	0xiiiiii32	rb = *(*double)(pc+imme)
+LBGF	0xiiiiii33	rb = *(*float) (pc+imme)
+LBX		0xiiiiii34	rb = *(*uint)  conv_to_phy_addr(rb+imme)
+LBXS	0xiiiiii35	rb = *(*short) conv_to_phy_addr(rb+imme)
+LBXH	0xiiiiii36	rb = *(*ushort)conv_to_phy_addr(rb+imme)
+LBXC	0xiiiiii37	rb = *(*char)  conv_to_phy_addr(rb+imme)
+LBXB	0xiiiiii38	rb = *(*uchar) conv_to_phy_addr(rb+imme)
+LBXD	0xiiiiii39	rb = *(*double)conv_to_phy_addr(rb+imme)
+LBXF	0xiiiiii3a	rb = *(*float) conv_to_phy_addr(rb+imme)
 LBI		0xiiiiii3b  rb = imme
 LBHI	0xiiiiii3c  rb = (rb<<24)|(imme>>8)
 LBIF	0xiiiiii3d  rb = double(imme)
 LBA		0xiiiiii3e  rb = ra
 LBAD    0xiiiiii3f  rg = rf
-###-----	store ra to mem	------------------------------------------------------------------------
+```
+
+#### store register a to memory 
+```
 SL		0xiiiiii40	*(*uint)  (sp+imme) = (uint)  (ra)
 SLH		0xiiiiii41	*(*ushort)(sp+imme) = (ushort)(ra)
 SLB		0xiiiiii42	*(*uchar) (sp+imme) = (ushort)(ra)
 SLD		0xiiiiii43	*(*double)(sp+imme) = (double)(ra)
 SLF		0xiiiiii44	*(*float) (sp+imme) = (float) (ra)
-SG		0xiiiiii45	*(*uint)  (BSS+imme) = (uint)  (ra)
-SGH		0xiiiiii46	*(*ushort)(BSS+imme) = (ushort)(ra)
-SGB		0xiiiiii47	*(*uchar) (BSS+imme) = (ushort)(ra)
-SGD		0xiiiiii48	*(*double)(BSS+imme) = (double)(ra)
-SGF		0xiiiiii49	*(*float) (BSS+imme) = (float) (ra)
-SX		0xiiiiii4a  *(*uint)  conv_to_phy_addr(imme) = (uint)  (ra)
-SXH		0xiiiiii4b	*(*ushort)conv_to_phy_addr(imme) = (ushort)(ra)
-SXB		0xiiiiii4c	*(*uchar) conv_to_phy_addr(imme) = (ushort)(ra)
-SXD		0xiiiiii4d	*(*double)conv_to_phy_addr(imme) = (double)(ra)
-SXF		0xiiiiii4e	*(*float) conv_to_phy_addr(imme) = (float) (ra)
------	arithmetic	----------------------------------------------------------------------------
+SG		0xiiiiii45	*(*uint)  (pc+imme) = (uint)  (ra)
+SGH		0xiiiiii46	*(*ushort)(pc+imme) = (ushort)(ra)
+SGB		0xiiiiii47	*(*uchar) (pc+imme) = (ushort)(ra)
+SGD		0xiiiiii48	*(*double)(pc+imme) = (double)(ra)
+SGF		0xiiiiii49	*(*float) (pc+imme) = (float) (ra)
+SX		0xiiiiii4a  *(*uint)  conv_to_phy_addr(rb+imme) = (uint)  (ra)
+SXH		0xiiiiii4b	*(*ushort)conv_to_phy_addr(rb+imme) = (ushort)(ra)
+SXB		0xiiiiii4c	*(*uchar) conv_to_phy_addr(rb+imme) = (ushort)(ra)
+SXD		0xiiiiii4d	*(*double)conv_to_phy_addr(rb+imme) = (double)(ra)
+SXF		0xiiiiii4e	*(*float) conv_to_phy_addr(rb+imme) = (float) (ra)
+```
+
+#### arithmetic
+```
 ADDF	0xiiiiii4f	rf = rf+rg
 SUBF	0xiiiiii50	rf = rf-rg
 MULF	0xiiiiii51	rf = rf*rg
@@ -158,7 +204,9 @@ LTF		0xiiiiii80	ra = (f < g)
 GE		0xiiiiii81	ra = ((int)a > (int)b)
 GEU		0xiiiiii82	ra = ((uint)a > (uint)b)
 GEF		0xiiiiii83	ra = (f > g)
-###-----	branch	-------------------------------------------------------------------------------
+```
+#### conditional branch
+```
 BZ		0xiiiiii84	if (ra == 0)  pc = pc+imme
 BZF		0xiiiiii85	if (rf == 0)  pc = pc+imme
 BNZ		0xiiiiii86  if (ra != 0)  pc = pc+imme
@@ -173,12 +221,18 @@ BLTF	0xiiiiii8e	if (f < g) pc = pc+imme
 BGE		0xiiiiii8f	if ((int)a < (int)b) pc = pc+imme
 BGEU	0xiiiiii90	if ((uint)a < (uint)b) pc = pc+imme
 BGEF	0xiiiiii91	if (f < g) pc = pc+imme
-###-----	conversation	-----------------------------------------------------------------------
+```
+
+#### conversion
+```
 CID		0xiiiiii92  f = (double)((int)a)
 CUD		0xiiiiii93	f = (double)((uint)a)
 CDI		0xiiiiii94	a = (int)(f)
 CDU		0xiiiiii95	a = (uint)(f)
-###-----	misc	-------------------------------------------------------------------------------
+```
+
+#### misc
+```
 CLI		0xiiiiii96	a = iena,	iena = 0
 STI		0xiiiiii97	if generated by hardware: set trap, and process the interrupt; else: iena = 1
 RTI		0xiiiiii98	return from interrupt, set pc, sp, may switch user/kernel mode; if has pending interrupt, process the interrupt
@@ -208,17 +262,20 @@ POPC	0xiiiiiiaf	c = *sp, sp += 8
 MSIZ 	0xiiiiiib0	a = memsz -- move physical memory to a.
 PSHG	0xiiiiiib1	sp -= 8, *sp = g
 POPG	0xiiiiiib2	g = *sp, sp += 8
-NET1	0xiiiiiib3	expand function lib
-NET2	0xiiiiiib4	expand function lib
-NET3	0xiiiiiib5	expand function lib
-NET4	0xiiiiiib6	expand function lib
-NET5	0xiiiiiib7	expand function lib
-NET6	0xiiiiiib8	expand function lib
-NET7	0xiiiiiib9	expand function lib
-NET8	0xiiiiiiba	expand function lib
-NET9	0xiiiiiibb	expand function lib
-###-----	math	-------------------------------------------------------------------------------
-POW		0xiiiiiibc	rf = pow(rf, rg)
+NET1	0xiiiiiib3	No use
+NET2	0xiiiiiib4	No use
+NET3	0xiiiiiib5	No use
+NET4	0xiiiiiib6	No use
+NET5	0xiiiiiib7	No use
+NET6	0xiiiiiib8	No use
+NET7	0xiiiiiib9	No use
+NET8	0xiiiiiiba	No use
+NET9	0xiiiiiibb	No use
+```
+
+#### math 
+```
+POW		0xiiiiiibc	rf = power(rf, rg)
 ATN2	0xiiiiiibd	rf = atan2(rf, rg)
 FABS	0xiiiiiibe	rf = fabs(rf, rg)
 ATAN	0xiiiiiic0	rf = atan(rf)
@@ -238,15 +295,14 @@ COSH	0xiiiiiicd	rf = cosh(rf)
 TANH	0xiiiiiice	rf = tanh(rf)
 SQRT	0xiiiiiicf	rf = sqrt(rf)
 FMOD	0xiiiiiid0	rf = fmod(rf, rg)
-###-----	idle	-------------------------------------------------------------------------------
+```
+
+#### cpu idle
+```
 IDLE 	0xiiiiiid1	response hardware interrupt (include timer).
-###-----------------------------------------------------------------------------------------------
-按照指令对条件的需求，指令可分类如下：
-	>	HALT, RTI, IDLE等，不需要立即数来参与，也不需要读取或修改寄存器值。
-	>	ADD, MCPY，PSHA等，不需要立即数来参与，但需要读取或修改寄存器值。
-	>	ADDI, S/L系列，B系列等，需要立即数和寄存器来参与。
-按照整体的角度，指令分为【运算比较指令】【流程控制指令】【装载卸载指令】三大类，以及【系统命令】（例如HALT, RTI, IDLE），【系统设置】（例如SSP, USP,IVEC, PDIR等)、【扩展函数库】(NET类, MCP类等)等其他辅助指令。
-##内存============================================================================================
+```
+
+## 内存
 缺省内存大小为128MB，可以通过启动参数"-m XXX"，设置为XXX MB大小．
 在TLB中，设置了4个1MB大小页转换表（page translation buffer array）
  - kernel read page translation table
@@ -262,21 +318,30 @@ tr/tw[page number]=phy page number //页帧号
 ```
 tpage[tpages++] = v //v是page number
 ```
-##IO操作==========================================================================================
+
+## IO操作
 ### 写外设（类似串口写）的步骤
  - 1 --> a
  - 一个字符'char' --> b
  - BOUT　　//如果在内核态，在终端上输出一个字符'char', 1-->a，如果在用户态，产生FPRIV异常
+
 ### 读外设（类似串口读）的步骤
 　- BIN  //如果在内核态，kchar -->a  kchar是模拟器定期轮询获得的一个终端输入字符
+ 　　
 如果iena(中断使能)，则在获得一个终端输入字符后，会产生FKEYBD中断 
+ 
 ### 设置timer的timeout
  - val --> a
  - TIME // 如果在内核态，设置timer的timeout为a; 如果在用户态，产生FPRIV异常
-##中断/异常=======================================================================================
+ 
+
+
+## 中断/异常
 ### 一些变量的含义：
  - ivec: 中断向量的地址
+ 
 ### 中断/异常类型
+```
 - FMEM,          // bad physical address 
 - FTIMER,        // timer interrupt
 - FKEYBD,        // keyboard interrupt
@@ -288,6 +353,7 @@ tpage[tpages++] = v //v是page number
 - FWPAGE,        // page fault on write
 - FRPAGE,        // page fault on read
 - USER 　　　　      // user mode exception 
+```
 
 ### 设置中断向量
  - val --> a
@@ -301,7 +367,7 @@ tpage[tpages++] = v //v是page number
  然后，保存中断的地址到kkernel mode的sp中，pc会跳到中断向量的地址ivec处执行
  
 　
-##CPU执行过程====================================================================================
+## CPU执行过程
 ### 一些变量的含义：
 主要集中在em.c的cpu()函数中
 
@@ -317,21 +383,17 @@ tpage[tpages++] = v //v是page number
  - xsp: sp在host内存中的值
  - tsp: sp在host内存中所在页的起始地址值
  - fsp: 辅助判断是否要经过tr/tw的分析
- - ssp:
- - usp:
- - cycle: 
- - xcycle:
- - timer:
- - timeout:
- -　detla:
+ - ssp: 内核态的栈指针
+ - usp: 用户态的栈指针
+ - cycle: 指令执行周期计数
+ - xcycle:　用于判断外设中断的执行频度，和调整最终的指令执行周期计数（需进一步明确?）
+ - timer: 当前时钟计时（和时间时间中断有关）
+ - timeout: 时钟周期，当timer>timeout时，产生时钟中断 
+ -　detla:　一次指令执行的时间，timer+=delta
  
-###执行过程概述
+ ###执行过程概述
  
  1. 首先，读入os kernel文件到内存的底部，并把pc放置到os kernel文件指定的内存位置，
  设置可用sp为　MEM_SZ-FS_SZ=124MB
  1. 然后从os kernel文件的起始地址开始执行
  1. 如果碰到异常或中断，则保存中断的地址，并跳到中断向量的地址ivec处执行
-
-
-
-
