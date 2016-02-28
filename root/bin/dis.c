@@ -110,11 +110,17 @@ int main(int argc, char** argv) {
 	for (i = 0 ; i < c_sz ; i++) {
 		int inst = dat[i]&255;
 		int imme = (int)(((unsigned int)(dat[i]))>>8);
-		fprintf(fo, "%3d: %08x: %08x: %c%c%c%c 0x%06x (D%4d)",
-			i+1, i*4, dat[i],
-			ops[inst*5], ops[inst*5+1], ops[inst*5+2], ops[inst*5+3],
-			imme, dat[i]>>8
-		);
+		if((unsigned char)(inst)<=0xd1) { //IDLE=0xd1
+			fprintf(fo, "%3d: %08x: %08x: %c%c%c%c 0x%06x (D%4d)",
+					i + 1, i * 4, dat[i],
+					ops[inst * 5], ops[inst * 5 + 1], ops[inst * 5 + 2], ops[inst * 5 + 3],
+					imme, dat[i] >> 8
+			);
+		}else{ //illegal instr
+			fprintf(fo, "%3d: %08x: %08x: %s \n",
+					i + 1, i * 4, dat[i],"illegal instr");
+			continue;
+		}
 		if (i == hdr.entry>>2)
 			fprintf(fo, " # <=ENTRY");
 		if (label[i])
@@ -132,6 +138,54 @@ int main(int argc, char** argv) {
 		}	    
 		if (!cmt) {
 			fprintf(fo, "\n"); continue;
+		}
+
+		if (ops[inst*5] == 'E' && ops[inst*5+1] == 'N') {
+			fprintf(fo, " # sp += 0x%x=%d\n", imme, dat[i] >> 8); continue;
+		}
+		if (ops[inst*5] == 'H' && ops[inst*5+1] == 'A' && ops[inst*5+2] == 'L' && ops[inst*5+3] == 'T') {
+			fprintf(fo, " # System Halt\n"); continue;
+		}
+
+		if (ops[inst*5] == 'I' && ops[inst*5+1] == 'D' && ops[inst*5+2] == 'L' && ops[inst*5+3] == 'E') {
+			fprintf(fo, " # Idle, wait interrupt\n"); continue;
+		}
+
+		if (ops[inst*5] == 'P' && ops[inst*5+1] == 'D' && ops[inst*5+2] == 'I' && ops[inst*5+3] == 'R') {
+			fprintf(fo, " # Page_Directory_Addr=ra\n"); continue;
+		}
+		if (ops[inst*5] == 'R' && ops[inst*5+1] == 'T' && ops[inst*5+2] == 'I') {
+			fprintf(fo, " # POP fault code|pc|sp\n"); continue;
+		}
+		if (ops[inst*5] == 'S' && ops[inst*5+1] == 'P' && ops[inst*5+2] == 'A' && ops[inst*5+3] == 'G') {
+			fprintf(fo, " # Paging=ra set/unset paging\n"); continue;
+		}
+		if (ops[inst*5] == 'S' && ops[inst*5+1] == 'S' && ops[inst*5+2] == 'P') {
+			fprintf(fo, " # kenel_sp=ra\n"); continue;
+		}
+		if (ops[inst*5] == 'S' && ops[inst*5+1] == 'T' && ops[inst*5+2] == 'I') {
+			fprintf(fo, " # Enable Interrupt\n"); continue;
+		}
+		if (ops[inst*5] == 'S' && ops[inst*5+1] == 'S' && ops[inst*5+2] == 'P') {
+			fprintf(fo, " # kernel_sp = ra\n"); continue;
+		}
+		if (ops[inst*5] == 'T' && ops[inst*5+1] == 'I' && ops[inst*5+2] == 'M' && ops[inst*5+3] == 'E') {
+			fprintf(fo, " # timer's timeout =ra\n"); continue;
+		}
+		if (ops[inst*5] == 'T' && ops[inst*5+1] == 'R' && ops[inst*5+2] == 'A' && ops[inst*5+3] == 'P') {
+			fprintf(fo, " #trap = FSYS for syscall\n"); continue;
+		}
+		if (ops[inst*5] == 'M' && ops[inst*5+1] == 'C' && ops[inst*5+2] == 'P' && ops[inst*5+3] == 'Y') {
+			fprintf(fo, " # memcpy(char *ra, char *rb, len=rc)\n"); continue;
+		}
+		if (ops[inst*5] == 'M' && ops[inst*5+1] == 'C' && ops[inst*5+2] == 'M' && ops[inst*5+3] == 'P') {
+			fprintf(fo, " # memcmp(char *ra, char *rb, len=rc)\n"); continue;
+		}
+		if (ops[inst*5] == 'M' && ops[inst*5+1] == 'C' && ops[inst*5+2] == 'H'&& ops[inst*5+3] == 'R') {
+			fprintf(fo, " # memchr(char *ra, char rb, len=rc)\n"); continue;
+		}
+		if (ops[inst*5] == 'M' && ops[inst*5+1] == 'S' && ops[inst*5+2] == 'E' && ops[inst*5+3] == 'T') {
+			fprintf(fo, " # memset(char *ra, char rb, len=rc)\n"); continue;
 		}
 		if (inst >= 0x4f && inst <= 0x83) {
 			if (inst-0x4f < 4) {
@@ -185,6 +239,9 @@ int main(int argc, char** argv) {
 				fprintf(fo, " # write(ra, &rb, 1)");
 		}
 		if (ops[inst*5] == 'C') {
+			if (ops[inst*5+1] == 'L' && ops[inst*5+2] == 'I') {
+				fprintf(fo, " # ra=iena, Disable Interrupt\n"); continue;
+			}
 			if (ops[inst*5+2] == 'D') {
 				fprintf(fo, " # rf = ");
 				if (ops[inst*5+1] == 'I') 
@@ -200,9 +257,23 @@ int main(int argc, char** argv) {
 					fprintf(fo, "uint(ra)");
 			}
 		}
+		if (ops[inst*5] == 'I') {
+			if (ops[inst*5+1] == 'V')
+				fprintf(fo, " # intr vec addr = ra\n");
+			if (ops[inst*5+1] == 'D')
+				fprintf(fo, " # idle, wait interrupt\n");
+		}
+
 		if (ops[inst*5] == 'L') {
 			if (ops[inst*5+2] == 'V') {
 				fprintf(fo, " # pc=*sp, sp += %d + 8 (return) \n", imme);
+				continue;
+			}
+			if (ops[inst*5+1] == 'B' && ops[inst*5+2] == 'A') {
+				if (ops[inst*5+3] == 'D')
+					fprintf(fo, " # rg=rf \n");
+				else
+					fprintf(fo, " # rb=ra \n");
 				continue;
 			}
 			if (ops[inst*5+1] == 'E') {
@@ -210,6 +281,22 @@ int main(int argc, char** argv) {
 					fprintf(fo, " # ra = pc+%d\n", imme);
 				else
 					fprintf(fo, " # ra = sp+%d\n", imme);
+				continue;
+			}
+			if (ops[inst*5+1] == 'C' && ops[inst*5+2] == 'L') {
+				fprintf(fo, " # rc = *(uint *)(sp + imme)\n");
+				continue;
+			}
+			if (ops[inst*5+1] == 'C' && ops[inst*5+2] == 'A') {
+				fprintf(fo, " # rc = ra\n");
+				continue;
+			}
+			if (ops[inst*5+1] == 'V' && ops[inst*5+2] == 'A' && ops[inst*5+3] == 'D') {
+				fprintf(fo, " # ra= bad virtual address\n");
+				continue;
+			}
+			if (ops[inst*5+1] == 'U' && ops[inst*5+2] == 'S' && ops[inst*5+3] == 'P') {
+				fprintf(fo, " # ra= user_sp \n");
 				continue;
 			}
 			fprintf(fo, " # ");
@@ -241,6 +328,10 @@ int main(int argc, char** argv) {
 			}
 		}
 		if (ops[inst*5] == 'S') {
+			if (ops[inst*5+1] == 'U' && ops[inst*5+2] == 'S' && ops[inst*5+3] == 'P') {
+				fprintf(fo, " # user_sp=ra \n");
+				continue;
+			}
 			if (ops[inst*5+1] == 'U') {
 				fprintf(fo, "\n"); continue;
 			}
@@ -292,9 +383,9 @@ int main(int argc, char** argv) {
 				}
 			}
 		}
-		if (ops[inst*5] == 'E' && ops[inst*5+1] == 'N') 
-			fprintf(fo, " # sp += 0x%x=%d\n", imme, dat[i]>>8);
 		fprintf(fo, "\n");
+
+
 	}
 	fprintf(fo, "=======================================================================\n");
 	fprintf(fo, "Data Segment\n");
