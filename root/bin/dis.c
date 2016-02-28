@@ -202,7 +202,7 @@ int main(int argc, char** argv) {
 		}
 		if (ops[inst*5] == 'L') {
 			if (ops[inst*5+2] == 'V') {
-				fprintf(fo, " # sp += %d and return \n", imme); 
+				fprintf(fo, " # pc=*sp, sp += %d + 8 (return) \n", imme);
 				continue;
 			}
 			if (ops[inst*5+1] == 'E') {
