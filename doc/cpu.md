@@ -1,7 +1,7 @@
 # v9-cpu
 
 ## 概述
-v9-cpu是一个假想的简单的32-bit CPU，用于操作系统教学实验和练习．
+v9-cpu是一个假想的简单的32-bit RISC CPU，用于操作系统教学实验和练习．
 
 ## 寄存器组:
 总共有 9 个寄存器,其中 7 个为 32 位,2 个为 64 位(浮点寄存器)。本文档只针对 CPU
@@ -10,6 +10,8 @@ v9-cpu是一个假想的简单的32-bit CPU，用于操作系统教学实验和�
  - a, b, c : 三个32-bit通用寄存器
  - f, g 两个64-bit浮点寄存器,是用来进行各种指令操作的
  - sp 为当前栈底指针，按64-bit(8字节)对齐
+   - usp: user stack，在用户态,sp是usp
+   - ssp: kernel stack，在内核台，sp是ksp,用户态应用不可见ssp
  - pc 为32-bit程序计数器（指向下一条指令），按32-bit(4字节)对齐，其指向的内存内容（即具体的指令值）会放到ir中，给CPU解码并执行
  - tsp 为栈顶指针(本 CPU 的栈是从顶部往底部增长),按64-bit(8字节)对齐
  - flags 为内部状态寄存器(包括当前的运行模式,是否中断使能,是否有自陷,以及是否使用虚拟地址等)，可通过特定指令访问相关bit
@@ -65,15 +67,27 @@ c --> 指令编码
 #### system
 ```
 HALT	0xiiiiii00	halt system
+
+//可用于分配函数中的局部变量
 ENT		0xiiiiii01  sp += imme
+//用于函数返回
 LEV		0xiiiiii02  pc =  *sp,	sp += imme+8
+
+//跳转指令
 JMP		0xiiiiii03	pc += imme
 JMPI	0xiiiiii04	pc += imme+ra>>2
+
+
+//用于函数调用
 JSR		0xiiiiii05	*sp = pc,	sp -= 8,	pc += imme
 JSRA	0x......06	*sp = pc,	sp -= 8,	pc += ra
+
 LEA		0xiiiiii07	ra = sp+imme
 LEAG	0xiiiiii08	ra = pc+imme
 CYC		0x......09	ra = current cycle related with pc
+
+
+//内存块操作
 MCPY	0x......0a	memcpy(ra, rb, rc)
 MCMP	0x......0b	memcmp(ra, rb, rc)
 MCHR	0x......0c  memchr(ra, rb, rc)
@@ -96,13 +110,13 @@ LGC		0xiiiiii18	ra = *(*char)  (pc+imme)
 LGB		0xiiiiii19	ra = *(*uchar) (pc+imme)
 LGD		0xiiiiii1a	ra = *(*double)(pc+imme)
 LGF		0xiiiiii1b	ra = *(*float) (pc+imme)
-LX		0xiiiiii1c	ra = *(*unit)  conv_to_phy_addr(ra+imme)
-LXS		0xiiiiii1d	ra = *(*short) conv_to_phy_addr(ra+imme)
-LXH		0xiiiiii1e	ra = *(*ushort)conv_to_phy_addr(ra+imme)
-LXC		0xiiiiii1f	ra = *(*char)  conv_to_phy_addr(ra+imme)
-LXB		0xiiiiii20	ra = *(*uchar) conv_to_phy_addr(ra+imme)
-LXD		0xiiiiii21	ra = *(*double)conv_to_phy_addr(ra+imme)
-LXF		0xiiiiii22	ra = *(*float) conv_to_phy_addr(ra+imme)
+LX		0xiiiiii1c	ra = *(*unit)  global_addr(ra+imme)
+LXS		0xiiiiii1d	ra = *(*short) global_addr(ra+imme)
+LXH		0xiiiiii1e	ra = *(*ushort)global_addr(ra+imme)
+LXC		0xiiiiii1f	ra = *(*char)  global_addr(ra+imme)
+LXB		0xiiiiii20	ra = *(*uchar) global_addr(ra+imme)
+LXD		0xiiiiii21	ra = *(*double)global_addr(ra+imme)
+LXF		0xiiiiii22	ra = *(*float) global_addr(ra+imme)
 LI		0xiiiiii23	ra = imme
 LHI		0xiiiiii24	ra = (ra<<24)|(imme>>8)
 LIF		0xiiiiii25	rf = double(imme)
@@ -124,13 +138,13 @@ LBGC	0xiiiiii30	rb = *(*char)  (pc+imme)
 LBGB	0xiiiiii31	rb = *(*uchar) (pc+imme)
 LBGD	0xiiiiii32	rb = *(*double)(pc+imme)
 LBGF	0xiiiiii33	rb = *(*float) (pc+imme)
-LBX		0xiiiiii34	rb = *(*uint)  conv_to_phy_addr(rb+imme)
-LBXS	0xiiiiii35	rb = *(*short) conv_to_phy_addr(rb+imme)
-LBXH	0xiiiiii36	rb = *(*ushort)conv_to_phy_addr(rb+imme)
-LBXC	0xiiiiii37	rb = *(*char)  conv_to_phy_addr(rb+imme)
-LBXB	0xiiiiii38	rb = *(*uchar) conv_to_phy_addr(rb+imme)
-LBXD	0xiiiiii39	rb = *(*double)conv_to_phy_addr(rb+imme)
-LBXF	0xiiiiii3a	rb = *(*float) conv_to_phy_addr(rb+imme)
+LBX		0xiiiiii34	rb = *(*uint)  global_addr(rb+imme)
+LBXS	0xiiiiii35	rb = *(*short) global_addr(rb+imme)
+LBXH	0xiiiiii36	rb = *(*ushort)global_addr(rb+imme)
+LBXC	0xiiiiii37	rb = *(*char)  global_addr(rb+imme)
+LBXB	0xiiiiii38	rb = *(*uchar) global_addr(rb+imme)
+LBXD	0xiiiiii39	rb = *(*double)global_addr(rb+imme)
+LBXF	0xiiiiii3a	rb = *(*float) global_addr(rb+imme)
 LBI		0xiiiiii3b  rb = imme
 LBHI	0xiiiiii3c  rb = (rb<<24)|(imme>>8)
 LBIF	0xiiiiii3d  rb = double(imme)
@@ -150,11 +164,11 @@ SGH		0xiiiiii46	*(*ushort)(pc+imme) = (ushort)(ra)
 SGB		0xiiiiii47	*(*uchar) (pc+imme) = (ushort)(ra)
 SGD		0xiiiiii48	*(*double)(pc+imme) = (double)(ra)
 SGF		0xiiiiii49	*(*float) (pc+imme) = (float) (ra)
-SX		0xiiiiii4a  *(*uint)  conv_to_phy_addr(rb+imme) = (uint)  (ra)
-SXH		0xiiiiii4b	*(*ushort)conv_to_phy_addr(rb+imme) = (ushort)(ra)
-SXB		0xiiiiii4c	*(*uchar) conv_to_phy_addr(rb+imme) = (ushort)(ra)
-SXD		0xiiiiii4d	*(*double)conv_to_phy_addr(rb+imme) = (double)(ra)
-SXF		0xiiiiii4e	*(*float) conv_to_phy_addr(rb+imme) = (float) (ra)
+SX		0xiiiiii4a  *(*uint)  global_addr(rb+imme) = (uint)  (ra)
+SXH		0xiiiiii4b	*(*ushort)global_addr(rb+imme) = (ushort)(ra)
+SXB		0xiiiiii4c	*(*uchar) global_addr(rb+imme) = (ushort)(ra)
+SXD		0xiiiiii4d	*(*double)global_addr(rb+imme) = (double)(ra)
+SXF		0xiiiiii4e	*(*float) global_addr(rb+imme) = (float) (ra)
 ```
 
 #### arithmetic
@@ -241,12 +255,18 @@ CDU		0x......95	a = (uint)(f)
 
 #### misc
 ```
+//屏蔽中断
 CLI		0x......96	a = iena,	iena = 0
+//使能中断
 STI		0x......97	if generated by hardware: set trap, and process the interrupt; else: iena = 1
-RTI		0x......98	return from interrupt, set pc, sp, may switch user/kernel mode; if has pending interrupt, process the interrupt
+//中断返回
+RTI		0x......98	return from interrupt, POP fault code, pc, sp,  if fault code== USER, then switch to user mode; if has pending interrupt, process the interrupt
+//IO读写
 BIN		0x......99	a = kbchar,	kbchar is the value from outside io
 BOUT	0x......9a	a = write(a, &b, 1);
+
 NOP		0x......9b	no operation.
+
 SSP		0x......9c	ksp = a -- ksp is kernel sp
 PSHA	0x......9d	sp -= 8, *sp = a
 PSHI	0x......9e	sp -= 8, *sp = imme
@@ -255,21 +275,33 @@ PSHB	0x......a0	sp -= 8, *sp = b
 POPB	0x......a1	b = *sp, sp += 8
 POPF	0x......a2	f = *(double *)sp, sp += 8
 POPA	0x......a3	a = *sp, sp += 8
+
+//设置中断向量起始地址
 IVEC	0x......a4	ivec = a -- set interrupt vector by a
+//设置页目录表起始地址
 PDIR	0x......a5	pdir = a -- set page directory physical memory by a
+//设置页机制使能/屏蔽
 SPAG	0x......a6	paging = a -- enable/disable virtual memory feature by a
+//设置时钟到时值
 TIME	0xiiiiiia7	if operand0 is 0: timeout = a -- set current timeout from a; else: printk("timer%d=%u timeout=%u", operand0, timer, timeout)
+//获取访问异常的地址
 LVAD	0x......a8	a = vadr -- vadr is bad virtual address
+//陷入指令，常用于系统调用
 TRAP	0x......a9	trap = FSYS
+//获取用户态的sp值
 LUSP	0x......aa	a = usp	
+//设置用户态的sp值
 SUSP	0x......ab	usp = a -- usp is user stack pointer
 LCL		0xiiiiiiac	c = *(uint *)(sp + imme)
 LCA		0x......ad	c = a
 PSHC	0x......ae	sp -= 8, *sp = c
 POPC	0x......af	c = *sp, sp += 8
+//获取内存大小
 MSIZ 	0x......b0	a = memsz -- move physical memory to a.
+
 PSHG	0x......b1	sp -= 8, *sp = g
 POPG	0x......b2	g = *sp, sp += 8
+
 NET1	0xiiiiiib3	No use
 NET2	0xiiiiiib4	No use
 NET3	0xiiiiiib5	No use
@@ -313,6 +345,7 @@ IDLE 	0x......d1	response hardware interrupt (include timer).
 ## 内存
 缺省内存大小为128MB，可以通过启动参数"-m XXX"，设置为XXX MB大小．
 在TLB中，设置了4个1MB大小页转换表（page translation buffer array）
+
  - kernel read page translation table
  - kernel write page translation table
  - user read page translation table
@@ -368,11 +401,22 @@ tpage[tpages++] = v //v是page number
  - IVEC // 如果在内核态，设置中断向量的地址ivec为a; 如果在用户态，产生FPRIV异常
 
 ### 中断/异常产生的处理
- - 如果终端产生了键盘输入，且iean=1，则ipend |= FKEYBD，0-->iena
- - 如果timer产生了timeout，且iean=1，则ipend |= FTIMER，0-->iena
- - 如果产生了其他异常，则会有相应的处理，
+对于中断，CPU在执行指令前进行判断，看是否有中断：
+
+ - 如果终端产生了键盘输入，且iena=1，则ipend |= FKEYBD，0-->iena
+ - 如果timer产生了timeout，且iena=1，则ipend |= FTIMER，0-->iena
  
- 然后，保存中断的地址到kkernel mode的sp中，pc会跳到中断向量的地址ivec处执行
+对于异常，即在执行某指令时出现了异常（非法访问内存，非法权限，算术异常等）,或者是陷入（trap）指令，则会有相应的处理
+
+ - 如果当前处于中断屏蔽状态(即iena=0)，则产生fatal错误；
+ - 对于异常，设置错误码为异常编码；对于陷入指令，设置错误码为FSYS
+
+然后是统一的善后处理：
+
+ - 如果当前处于用户态(user=1)，则sp=kernel_sp, tr=kernel_tr, tw=kernel_tw,  trap|=USER
+ - PUSH当前的pc到当前内核栈
+ - PUSH 错误码(fault code)到当前内核栈
+ - pc跳转中断向量的地址ivec
 
 
 ## 应用二进制接口（application binary interface，ABI）
