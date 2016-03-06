@@ -88,11 +88,22 @@ char ops[] =
   "ACOS,SINH,COSH,TANH,SQRT,FMOD,"
   "IDLE,";
 
-uint bp[256]; int bpn;	// breakpoints
-char* sc = NULL; 		// source code filename
-char sct[65536]; 		// scode text
-int labelJ[65536];		// label for JSR
-int td_sz;				// TEXT & DATA segment size
+uint bp[256]; int bpn;			 // breakpoints
+char* sc = NULL; 				 // source code filename
+char sct[65536]; 				 // scode text
+int labelJ[65536];				 // label for JSR
+int td_sz;						 // TEXT & DATA segment size
+char smem[65536]; int smemL = 0; // string memory
+int ret_ct;						 // return count
+char* libs[256]; int libN = 0;	 // library paths
+
+int _strcmp(char* s1, char* s2, int len) {
+	char tmp = s1[len];
+	s1[len] = '\0';
+	int ret = strcmp(s1, s2);
+	s1[len] = tmp;
+	return ret;
+}
 
 struct var_struct {
 	char* name; char* type;
@@ -104,8 +115,18 @@ struct func_struct {
 	uint locN; var_t locs[32]; 
 };
 typedef struct func_struct func_t;
+struct number_struct {
+	char* type; char* name;
+};
+typedef struct number_struct number_t;
+struct stu_struct {
+	char* name; int size; 
+	int numN; number_t nums[256]; 
+};
+typedef struct stu_struct stu_t;
 func_t func[256]; int funcN = 0;
 var_t glbs[256]; int glbN = 0;
+stu_t stus[256]; int stuN = 0;
 
 void initialize() {
 	int i = strlen(ops)-1;
@@ -117,20 +138,24 @@ void expand_include(char* codes, int codeL) {
 	static char file[256];
 	static char _codes[65536];
 	static int _codeL = 0;
-	int i = 0, j = 0, k = 0; 
+	int i = 0, j = 0, k = 0, l = 0; 
 	int f = 0; struct stat st;
 	for (i = 0 ; i < codeL ; i++)
-		if (!strcmp(codes+i, "#include")) {
+		if (!_strcmp(codes+i, "#include", 8)) {
 			for (j = i+8 ; codes[j] != '<' ; j++);
 			for (k = ++j ; codes[k] != '>' ; k++);
-			memcpy(file, codes+j, k-j);
-			file[k-j] = '\0';
-			if ((f = open(file, O_RDONLY)) < 0) {
-  				dprintf(2, "%s : couldn't open %s\n", cmd, file); exit(-1); }
-  			if (fstat(f, &st)) {
-  				dprintf(2, "%s : couldn't stat %s\n", cmd, file); exit(-1); }
-  			read(f, _codes+_codeL, st.st_size);
-  			_codeL += st.st_size;
+			for (l = 0 ; l < libN ; l++) {
+				strcpy(file, libs[l]);
+				memcpy(file+strlen(libs[l]), codes+j, k-j);
+				file[strlen(libs[l])+k-j] = '\0';
+				if ((f = open(file, O_RDONLY)) < 0) {
+  					dprintf(2, "%s : couldn't open %s\n", cmd, file); continue;}
+  				if (fstat(f, &st)) {
+  					dprintf(2, "%s : couldn't stat %s\n", cmd, file); continue;}
+  				read(f, _codes+_codeL, st.st_size);
+  				_codeL += st.st_size;
+  				break;
+  			}
   		} else
   			_codes[_codeL++] = codes[i];
   	memcpy(codes, _codes, _codeL);
@@ -139,6 +164,15 @@ void expand_include(char* codes, int codeL) {
 char* strgen(char* s, int len) {
 	s[len] = '\0'; return s;
 }
+
+char* strclone(char* s) {
+	int len = strlen(s);
+	memcpy(smem+smemL, s, len);
+	smemL += len+8;
+	smem[smemL] = '\0';
+	return smem+smemL-len-8;
+}
+
 int typesize(char* tp) {
 	if (tp[strlen(tp)] == '*') return 4;
 	if (!strcmp(tp, "float")) return 4;
@@ -149,6 +183,11 @@ int typesize(char* tp) {
 	if (!strcmp(tp, "ushort")) return 2;
 	if (!strcmp(tp, "char")) return 1;
 	if (!strcmp(tp, "uchar")) return 1;
+	int i = 0;
+	for ( ; i < stuN ; i++) 
+		if (!strcmp(tp, stus[i].name)) {
+			return stus[i].size;
+		}
 	return -1;
 }
 
@@ -159,9 +198,22 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 	for (i = 0 ; i < instN ; i++) {
 		//printf("insts[%d]=%d\n", i, insts[i]&255);
 		if ((insts[i]&255) == JSR) 
-			labelJ[i+(((int)(insts[i]))>>10)+1] = 1;	
+			labelJ[i+(((int)(insts[i]))>>10)+1] = 1;
+		if (!i || (insts[i-1]&255)==LEV)
+			labelJ[i] = 1;
 	}
-	for (i = 0 ; i < codeL ; i++) {
+	int jsr_ct = 0;
+	/*
+	for (i = 0 ; i < instN ; i++) 
+		if (labelJ[i]) 
+			printf("0x%08x entry %d\n", i<<2, ++jsr_ct);
+	printf("count = %d\n", jsr_ct);
+	*/
+	for (i = 0 ; i < codeL ; o_stu = stu, i++) {
+		while (i < codeL && codes[i] == '/' && codes[i+1] == '/') { 
+			while (codes[i] != '\n') i++; i++;
+		}
+		if (i >= codeL) break;
 		//printf("code[%d]=%c\n", i, codes[i]);
 		switch (codes[i]) {
 			case '(' : case '{' : 
@@ -169,31 +221,45 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 			case ')' : case '}' : 
 				stu -= 0x0001; break;
 			case '\"' : 
-				stu ^= ((stu>>8)&1) ? 0 : 0x0100; break;
+				stu ^= 0x0100; break;
 			case '\'' :
-				stu ^= ((stu>>8)&1) ? 0 : 0x0100; break;
+				stu ^= 0x0100; break;
 			default : break;
 		}
 		if ((o_stu&255) == 0 && (stu&255) == 1) {
-		 	stu &= (~0x0400);
-		 	if (codes[i] == '(' && !(stu&0x0200)) {
+		 	if (codes[i] == '(') {
+		 		func[funcN].regN = 0;
 		 		stu |= 0x0200;
 				for (fn = codes+i-1 ; *fn == ' ' ; fn--);					// get func name
 				for (fns = 0 ; isalpha(*fn) || isdigit(*fn) ; fn--, fns++);
 				fn++;
-				//printf("get func name fns=%d\n", fns);
 		 	} else {
-		 		if (codes[i] == '{' && (stu&0x0200))
-					stu |= 0x0400;
+		 		if (codes[i] == '{') {
+		 			ret_ct = 0;
+		 			if (stu&0x0200) stu |= 0x0400;
+							else	stu |= 0x0800;
+				}
+				if (stu&0x0800) {
+					for (fn = codes+i-1 ; *fn == ' ' ; fn--);
+					for (fns = 0 ; isalpha(*fn) || isdigit(*fn) ; fn--, fns++);
+					if (fns == 0) continue;
+					fn[fns] = '\0';
+					if (!strcmp(fn, "enum")) continue;
+					stus[stuN].name = fn;
+					stus[stuN].size = 0;
+					stus[stuN++].numN = 0;
+				}
 				stu &= (~0x0200);
 			}
 		}
 		if ((o_stu&255) == 1 && (stu&255) == 0) {
+			//printf("down stu=%x code=%c\n", stu, codes[i]);
 			if ((stu&0x0200) && codes[i] == ')') {
 				for (i1 = i-1 ; codes[i1] == ' '; i1--);
 				if (codes[i1] == '(') continue;
 				for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
-				for (i2 = i1-1 ; codes[i2] == '*' || isalpha(codes[i2]) ; i2--);
+				for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+				for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
 				func[funcN].regs[func[funcN].regN].name = strgen(codes+i1+1, i-i1-1);
 				func[funcN].regs[func[funcN].regN++].type = (i1==++i2 || codes[i1] != ' ' ? "int" : strgen(codes+i2, i1-i2));
 				while (func[funcN].regs[func[funcN].regN-1].name[0] == '*') {
@@ -201,26 +267,30 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 					codes[i1] = '*';
 					codes[++i1] = '\0';
 				}
-				printf("%d reg %d name=%s type=%s\n", 
-					funcN, func[funcN].regN-1,
-					func[funcN].regs[func[funcN].regN-1].name,
-					func[funcN].regs[func[funcN].regN-1].type
-				);
 			}
 			if ((stu&0x0400) && codes[i] == '}') {
-				func[funcN].nameS = fn;								// set func msg
+				func[funcN].nameS = strgen(fn, fns);						
 				func[funcN].nameL = fns;
 				while (!labelJ[j]) j++;
 				func[funcN++].addr = (j++)<<2;
+				while (ret_ct--) {
+					while (!labelJ[j]) j++; j++;
+				}
+				printf("%d %s 0x%08x\n", funcN-1, func[funcN-1].nameS, func[funcN-1].addr);
+				stu &= (~0x0400);
 			}
+			if ((stu&0x0800) && codes[i] == '}')
+				stu &= (~0x0800);
 		}
 		if (o_stu==stu && (stu&255) == 0) {
 			if (codes[i] == '=' || codes[i] == ',' || codes[i] == ';') {
 				for (i1 = i-1 ; codes[i1] == ' '; i1--);
 				for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
-				for (i2 = i1-1 ; codes[i2] == '*' || isalpha(codes[i2]) ; i2--);
+				for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+				for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
+				if (i1 == ++i2) continue;
 				glbs[glbN].name = strgen(codes+i1+1, i-i1-1);
-				glbs[glbN].type = strgen(codes+(++i2), i1-i2);
+				glbs[glbN].type = strgen(codes+i2, i1-i2);
 				while (glbs[glbN].name[0] == '*') {
 					glbs[glbN].name++;
 					codes[i1] = '*';
@@ -229,13 +299,19 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 				if (typesize(glbs[glbN].type) != -1) glbN++;
 			}
 		}
+		if (o_stu==stu) {
+			if (!(stu&0x0100) && !_strcmp(codes+i, "return", 6)) {
+				printf("return at %d\n", i);
+				ret_ct++;
+			}
+		}
 		if (o_stu==stu && (stu&255) == 1) {
-			//printf("%08x %d %c\n", stu, i, codes[i]);
+			//printf("%x %d %c\n", stu, i, codes[i]);
 			if ((stu&0x0200) && codes[i] == ',') {
 				for (i1 = i-1 ; codes[i1] == ' '; i1--);
 				for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
-				for (i2 = i1-1 ; codes[i2] == '*' || isalpha(codes[i2]) ; i2--);
-				printf("\n");
+				for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+				for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
 				func[funcN].regs[func[funcN].regN].name = strgen(codes+i1+1, i-i1-1);
 				func[funcN].regs[func[funcN].regN++].type = (i1==++i2 || codes[i1] != ' ' ? "int" : strgen(codes+i2, i1-i2));
 				while (func[funcN].regs[func[funcN].regN-1].name[0] == '*') {
@@ -243,44 +319,57 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 					codes[i1] = '*';
 					codes[++i1] = '\0';
 				}
-				printf("%d reg %d name=%s type=%s\n", 
-					funcN, func[funcN].regN-1,
-					func[funcN].regs[func[funcN].regN-1].name,
-					func[funcN].regs[func[funcN].regN-1].type
-				);
 			}
 			if ((stu&0x0400) && (codes[i] == '=' || codes[i] == ',' || codes[i] == ';')) {
 				for (i1 = i-1 ; codes[i1] == ' '; i1--);
 				for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
-				for (i2 = i1-1 ; codes[i2] == '*' || isalpha(codes[i2]) ; i2--);
-				//printf("%d %d %d %c %c %c\n",
-				//	i, i1+1, i2+1, codes[i], codes[i1+1], codes[i2+1]);
-				if (i1==++i2 && codes[i2-1] != '\0') continue;
+				for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+				for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
+				if (i1==++i2) continue;
 				func[funcN].locs[func[funcN].locN].name = strgen(codes+i1+1, i-i1-1);
-				func[funcN].locs[func[funcN].locN].type = (i1==i2 ? func[funcN].locs[func[funcN].locN-1].type : strgen(codes+i2, i1-i2));
-				while (func[funcN].locs[func[funcN].locN].name[0] == '*') {
-					func[funcN].locs[func[funcN].locN].name++;
+				func[funcN].locs[func[funcN].locN].type = strgen(codes+i2, i1-i2);
+				if (!isalpha(func[funcN].locs[func[funcN].locN].name[0])) continue;
+				if (typesize(func[funcN].locs[func[funcN].locN].type) == -1) continue;
+				int o_locN = func[funcN].locN++;
+				if (codes[i] == '=') 
+					while (codes[i] != ',' && codes[i] != ';') i++;
+				while (codes[i] == ',') {
+					while (codes[i] != '=' && codes[i] != ',' && codes[i] != ',') i++;
+					for (i1 = i-1 ; codes[i1] == ' '; i1--);
+					for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
+					for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+					for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
+					func[funcN].locs[func[funcN].locN].name = strgen(codes+i1+1, i-i1-1);
+					func[funcN].locs[func[funcN].locN].type = strclone(func[funcN].locs[func[funcN].locN-1].type);
+					func[funcN].locN++;
+				}
+				for (k = o_locN ; k < func[funcN].locN ; k++)
+					while (func[funcN].locs[k].name[0] == '*') {
+						func[funcN].locs[k].name++;
+						*(func[funcN].locs[k].type+strlen(func[funcN].locs[j].type)+1) = '\0';
+						*(func[funcN].locs[k].type+strlen(func[funcN].locs[j].type)) = '*';
+					}
+			}
+			if ((stu&0x0800) && codes[i] == ';') {
+				for (i1 = i-1 ; codes[i1] == ' '; i1--);
+				for ( ; codes[i1] == '*' || isalpha(codes[i1]) || isdigit(codes[i1]); i1--);
+				for (i2 = i1 ; codes[i2] == ' ' ; i2--);
+				for ( ; codes[i2] == '*' || isalpha(codes[i2]) || isdigit(codes[i2]); i2--);
+				if (i1==++i2 && codes[i2-1] != '\0') continue;
+				stus[stuN-1].nums[stus[stuN-1].numN].name = strgen(codes+i1+1, i-i1-1);
+				stus[stuN-1].nums[stus[stuN-1].numN].type = (i1==i2 ? stus[stuN-1].nums[stus[stuN-1].numN-1].type : strgen(codes+i2, i1-i2));
+				while (stus[stuN-1].nums[stus[stuN-1].numN].name[0] == '*') {
+					stus[stuN-1].nums[stus[stuN-1].numN].name++;
 					codes[i1] = '*';
 					codes[++i1] = '\0';
 				}
-				/*
-				printf("name=%s type=%s check\n", 
-					func[funcN].locs[func[funcN].locN].name,
-					func[funcN].locs[func[funcN].locN].type
-				);
-				*/
-				if (!isalpha(func[funcN].locs[func[funcN].locN].name[0])) continue;
-				if (typesize(func[funcN].locs[func[funcN].locN].type) != -1) {
-					printf("%d loc %d name=%s type=%s\n", 
-						funcN, func[funcN].locN,
-						func[funcN].locs[func[funcN].locN].name,
-						func[funcN].locs[func[funcN].locN].type
-					);
-					func[funcN].locN++;
+				int sz = typesize(stus[stuN-1].nums[stus[stuN-1].numN].type); 
+				if (sz != -1) {
+					stus[stuN-1].size += sz;
+					stus[stuN-1].numN++;
 				}
 			}
 		}
-		o_stu = stu;
 	}
 }
 
@@ -557,14 +646,11 @@ next:
         	}
         	printf("\n");
         }
-        /*
-        if (!strcmp(dbgbuf+1, "g")) {
-        	int glb_sz = 0;
-        	for (i = 0 ; i < glbN ; i++) {
-        		
-        		
+        if (!strcmp(dbgbuf+1, "f")) {
+        	for (i = 0 ; i < funcN ; i++)
+        		printf("%02d %-10s 0x%08x\n",
+        			i, func[i].nameS, func[i].addr);
         }
-        */
         goto again;
       case 'x':
       	if (dbgbuf[1] == '/') {
@@ -1099,6 +1185,7 @@ int main(int argc, char *argv[])
     case 'm': memsz = atoi(*++argv) * (1024 * 1024); argc--; break;
     case 'f': fs = *++argv; argc--; break;
     case 's': sc = *++argv; argc--; break;
+    case 'I': libs[libN++] = *++argv; argc--; break;
     default: usage();
     }
     file = *++argv;
