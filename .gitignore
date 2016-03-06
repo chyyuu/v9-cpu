@@ -18,4 +18,3 @@ backup*
 root/bin/c
 fs.img
 xmkfs
-root/etc/*
