@@ -219,7 +219,7 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 			case '(' : case '{' : 
 				stu += 0x0001; break;
 			case ')' : case '}' : 
-				stu -= 0x0001; break;
+				stu -= 0x0001; break; //d
 			case '\"' : 
 				stu ^= 0x0100; break;
 			case '\'' :
