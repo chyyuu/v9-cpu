@@ -81,7 +81,7 @@ typedef struct {
     int size;
 } array_t;
 
-int tk,       // current token
+int     tk,       // current token
         ts, ip,   // text segment, current pointer
         gs, data, // data segment, current offset
         bss,      // bss offset, for uninitialiezed global data
@@ -97,20 +97,20 @@ int tk,       // current token
         *pdata,   // data segment patchup pointer
         *pbss;    // bss segment patchup pointer
 
-ident_t *id;  // current parsed identifier
-double fval;  // current token double value
-uint ty,      // current parsed subexpression type
-        rt,      // current parsed function return type
-        bigend;  // big-endian machine
+ident_t *id;      // current parsed identifier
+double  fval;     // current token double value
+uint    ty,       // current parsed subexpression type
+        rt,       // current parsed function return type
+        bigend;   // big-endian machine
 
-char *file,   // input file name
-        *cmd,    // command name
-        *incl,   // include path
-        *pos;    // input file position
+char    *file,    // input file name
+        *cmd,     // command name
+        *incl,    // include path
+        *pos;     // input file position
 
-loc_t *ploc;  // local variable stack pointer
+loc_t   *ploc;    // local variable stack pointer
 
-char ops[] =
+char    ops[] =
         "HALT,ENT ,LEV ,JMP ,JMPI,JSR ,JSRA,LEA ,LEAG,CYC ,MCPY,MCMP,MCHR,MSET," // system
                 "LL  ,LLS ,LLH ,LLC ,LLB ,LLD ,LLF ,LG  ,LGS ,LGH ,LGC ,LGB ,LGD ,LGF ," // load a
                 "LX  ,LXS ,LXH ,LXC ,LXB ,LXD ,LXF ,LI  ,LHI ,LIF ,"
@@ -151,7 +151,7 @@ typedef enum {
     Num = 128, // low ordering of Num and Auto needed by nodc()
 
     // keyword grouping needed by main()  XXX missing extern and register
-            Asm, Auto, Break, Case, Char, Continue, Default, Do, Double, Else, Enum, Float, For, Goto, If, Int, Long, Return, Short,
+    Asm, Auto, Break, Case, Char, Continue, Default, Do, Double, Else, Enum, Float, For, Goto, If, Int, Long, Return, Short,
     Sizeof, Static, Struct, Switch, Typedef, Union, Unsigned, Void, While, Va_list, Va_start, Va_arg,
 
     Id, Numf, Ptr, Not, Notf, Nzf, Lea, Leag, Fun, FFun, Fcall, Label, FLabel,
@@ -162,7 +162,7 @@ typedef enum {
     Addf, Subf, Mulf, Dvu, Divf, Mdu,
 
     // operator precedence order needed by expr()
-            Comma,
+    Comma,
     Assign,
     Adda, Suba, Mula, Diva, Moda, Anda, Ora, Xora, Shla, Shra,
     Cond,
@@ -2223,7 +2223,12 @@ int main(int argc, char *argv[])
       case 's': debug = 1; break;
       case 'I': incl = file + 2; break;
       case 'o': if (argc > 1) { outfile = *++argv; argc--; break; }
-      default: usage: dprintf(2,"usage: %s [-v] [-s] [-Ipath] [-o exefile] file ...\n", cmd); return -1;
+      default: usage: dprintf(2,"usage: %s [-v] [-s] [-Ipath] [-o exefile] file ...\n", cmd); 
+					  dprintf(2, "-v: verbose information output\n");
+					  dprintf(2, "-s: debug output exefile.dml for debug\n");
+					  dprintf(2, "-I: the path of include files\n");
+					  dprintf(2, "-o: the execution file name\n");
+					  return -1;
     }
     file = *++argv;
   }

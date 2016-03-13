@@ -20,3 +20,5 @@ fs.img
 xmkfs
 root/etc/os
 root/etc/sfs.img
+*.jpg
+*.dml
