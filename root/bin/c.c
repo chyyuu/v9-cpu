@@ -198,20 +198,36 @@ char *mapfile(char *name, int size) // XXX replace with mmap
   return p;
 }
 
+// =======================================================================================
+//  new feature : debug label
+char emiBuf[56636];	int emiLen = 0;		// emitter buffer text
+
+int o_line = -1;
+char* o_p = NULL;
+char* o_pos = NULL;
+int o_inst_ct = 0;
+int inst_ct = 0;
+
 // instruction emitter
 void em(int i)
 {
-  if (debug) printf("%08x  %08x%6.4s\n", ip-ts, i, &ops[i*5]);
+	inst_ct++;
+  if (debug) {
+  	sprintf(emiBuf+emiLen, "\t\t%08x  %08x%6.4s\n", ip-ts, i, &ops[i*5]);
+  	emiLen += strlen(emiBuf+emiLen);
+  }
   *(int *)ip = i;
   ip += 4;
 }
 void emi(int i, int c)
 {
+	inst_ct++;
   if (debug) {
     if (i == 3 || i == 5) //show JMP, JSR
-      printf("%08x  %08x%6.4s  0x%x (TO 0x%x)\n", ip - ts, i | (c << 8), &ops[i * 5], c, ip-ts+c+4);
+      sprintf(emiBuf+emiLen, "\t\t%08x  %08x%6.4s  0x%x (TO 0x%x)\n", ip - ts, i | (c << 8), &ops[i * 5], c, ip-ts+c+4);
     else
-      printf("%08x  %08x%6.4s  0x%x (D %d)\n", ip - ts, i | (c << 8), &ops[i * 5], c, c);
+      sprintf(emiBuf+emiLen, "\t\t%08x  %08x%6.4s  0x%x (D %d)\n", ip - ts, i | (c << 8), &ops[i * 5], c, c);
+    emiLen += strlen(emiBuf+emiLen);
   }
   if (c<<8>>8 != c) err("emi() constant out of bounds");
   *(int *)ip = i | (c << 8);
@@ -222,7 +238,11 @@ void eml(int i, int c) { emi(i, c - loc); } // local
 void emg(int i, int c) { if (c < BSS_TAG) *pdata++ = ip; else { *pbss++ = ip; c -= BSS_TAG; } emi(i, c); } // global
 int emf(int i, int c) // forward
 {
-  if (debug) printf("%08x  %08x%6.4s  <fwd>\n", ip-ts, i | (c << 8), &ops[i*5]);
+	inst_ct++;
+  if (debug) {
+  	sprintf(emiBuf+emiLen, "\t\t%08x  %08x%6.4s  <fwd>\n", ip-ts, i | (c << 8), &ops[i*5]);
+  	emiLen += strlen(emiBuf+emiLen);
+  }
   if (c<<8>>8 != c) err("emf() offset out of bounds");
   *(int *)ip = i | (c << 8);
   ip += 4;
@@ -241,10 +261,34 @@ void patch(int t, int a)
 // parser
 void dline()
 {
+  if (o_line != -1) {
+  	printf("<stmt file=%s line=%d start=%d end=%d>\n", file, o_line, o_inst_ct, inst_ct);
+  	printf("\t<code>%.*s</code>\n", o_p - o_pos, o_pos);
+  	if (emiLen) printf("\t<emi>\n%s\t</emi>\n", emiBuf);
+  	printf("</stmt>\n");
+  } 
+  memset(emiBuf, 0, sizeof(emiBuf));
+  emiLen = 0;
   char *p;
   for (p = pos; *p && *p != '\n' && *p != '\r'; p++);
-  printf("%s  %d: %.*s\n", file, line, p - pos, pos);
+  //printf("%s  %d: %.*s\n", file, line, p - pos, pos);  // elder version
+  o_line = line;
+  o_p = p;
+  o_pos = pos;
+  o_inst_ct = inst_ct;
 }
+
+void dline_end() {
+  if (o_line != -1) {
+  	printf("<stmt file=%s line=%d start=%d end=%d>\n", file, o_line, o_inst_ct, inst_ct);
+  	printf("\t<code>%.*s</code>\n", o_p - o_pos, o_pos);
+  	if (emiLen) printf("\t<emi>\n%s\t</emi>\n", emiBuf);
+  	printf("</stmt>\n");
+  }
+}
+
+// ======================================================================================
+
 
 void next()
 {
@@ -2243,5 +2287,6 @@ int main(int argc, char *argv[])
     }
   }
   if (verbose) dprintf(2,"%s : exiting\n", cmd);
+  if (debug) dline_end();
   return errs;
 }
