@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.1)
 project(v9_cpu)
-
+project(xc)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 #set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -m32 -I../linux -I../root/lib")
 include_directories(${v9_cpu_SOURCE_DIR}/linux ${v9_cpu_SOURCE_DIR}/root/lib)
 set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -m32")
+set(EXECUTABLE_OUTPUT_PATH ${v9_cpu_SOURCE_DIR}/build)
 link_libraries(m)
 set(CPU_SOURCE_FILES
     linux/dir.h

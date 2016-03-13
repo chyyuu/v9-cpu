@@ -78,7 +78,7 @@ void write_meta(uint size, uint mode, uint nlink)
   }
 }
 
-add_dir(uint parent, struct direct *sp)
+void add_dir(uint parent, struct direct *sp)
 {
   uint size, dsize, dseek, nlink = 2;
   int f, n, i;
@@ -87,7 +87,7 @@ add_dir(uint parent, struct direct *sp)
   struct dirent *dp;
   struct stat st;
   static uchar zeros[4096];
-    
+  int ret;
   // build directory
   de = sp;
   d = opendir(".");
@@ -117,9 +117,9 @@ add_dir(uint parent, struct direct *sp)
   for (p = de + 2; p < sp; p++) {
     size = p->d_ino; p->d_ino = bn;
     if (size == -1) { // subdirectory
-      chdir(p->d_name);
+      ret=chdir(p->d_name);
       add_dir(parent, sp);
-      chdir("..");
+      ret=chdir("..");
     } else { // file
       write_meta(size, S_IFREG, 1);
       if (size) {
@@ -144,6 +144,8 @@ int main(int argc, char *argv[])
 {
   struct direct *sp;
   static char cwd[PATH_MAX];
+  int ret;
+  char *chr_ret;
   if (sizeof(struct dinode) != 4096) { dprintf(2, "sizeof(struct dinode) %d != 4096\n", sizeof(struct dinode)); return -1; }
   
   if (argc != 3) { dprintf(2, "Usage: mkfs fs rootdir\n"); return -1; }
@@ -154,10 +156,10 @@ int main(int argc, char *argv[])
   write_disk(buf, BUFSZ);
   
   // populate file system
-  getcwd(cwd, sizeof(cwd));
-  chdir(argv[2]);
+  chr_ret=getcwd(cwd, sizeof(cwd));
+  ret=chdir(argv[2]);
   add_dir(bn = 16, sp);
-  chdir(cwd);
+  ret=chdir(cwd);
 
   // update bitmap
   memset(buf, 0xff, bn / 8);

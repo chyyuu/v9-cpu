@@ -261,6 +261,8 @@ void patch(int t, int a)
 // parser
 void dline()
 {
+  char *p;
+  
   if (o_line != -1) {
   	printf("<stmt file=%s line=%d start=%d end=%d>\n", file, o_line, o_inst_ct, inst_ct);
   	printf("\t<code>%.*s</code>\n", o_p - o_pos, o_pos);
@@ -269,7 +271,7 @@ void dline()
   } 
   memset(emiBuf, 0, sizeof(emiBuf));
   emiLen = 0;
-  char *p;
+ 
   for (p = pos; *p && *p != '\n' && *p != '\r'; p++);
   //printf("%s  %d: %.*s\n", file, line, p - pos, pos);  // elder version
   o_line = line;
