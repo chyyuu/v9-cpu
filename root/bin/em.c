@@ -582,7 +582,8 @@ void cpu(uint pc, uint sp)
 					pfd.events = POLLIN;
 					if (poll(&pfd, 1, 0) == 1 && read(0, &ch, 1) == 1) {
 						kbchar = ch;
-						if (kbchar == '`') { dprintf(2,"ungraceful exit. cycle = %u\n", cycle + (int)((uint)xpc - xcycle)/4); return; }
+						if (kbchar == '~') { dprintf(2,"ungraceful exit. cycle = %u\n", cycle + (int)((uint)xpc - xcycle)/4); return; }
+						if (kbchar == '`') { dbg=1; goto runir; }
 						if (iena) { trap = FKEYBD; iena = 0; goto interrupt; }
 						ipend |= FKEYBD;
 					}
@@ -599,7 +600,7 @@ void cpu(uint pc, uint sp)
 			}
 		}
 
-		ir = *xpc++;
+		runir:		ir = *xpc++;
 
 		//printf("pc = %x\n", (uint)(xpc-1)-tpc);
 		if (cbp == -2) {
@@ -779,7 +780,8 @@ void cpu(uint pc, uint sp)
 				pfd.events = POLLIN;
 				if (poll(&pfd, 1, 0) == 1 && read(0, &ch, 1) == 1) {
 					kbchar = ch;
-					if (kbchar == '`') { dprintf(2,"ungraceful exit. cycle = %u\n", cycle + (int)((uint)xpc - xcycle)/4); return; }
+					if (kbchar == '~') { dprintf(2,"ungraceful exit. cycle = %u\n", cycle + (int)((uint)xpc - xcycle)/4); return; }
+					if (kbchar == '`') { dbg=1; goto runir; }
 					trap = FKEYBD;
 					iena = 0;
 					goto interrupt;
