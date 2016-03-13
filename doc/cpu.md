@@ -360,6 +360,64 @@ tr/tw[page number]=phy page number //页帧号
 tpage[tpages++] = v //v是page number
 ```
 
+### 分页机制
+#### 相关操作
+- PDIR --> page_directory base addr PTBR <--reg a
+- SPAG --> enable_paging = a
+
+#### 页表格式
+
+```
+                                                              PAGE FRAME
+              +-----------+-----------+----------+         +---------------+
+              | DIR 10bit |PAGE 10bit |OFF 12bit |         |               |
+              +-----+-----+-----+-----+-----+----+         |               |
+                    |           |           |              |               |
+      +-------------+           |           +------------->|    PHYSICAL   |
+      |                         |                          |    ADDRESS    |
+      |   PAGE DIRECTORY        |      PAGE TABLE          |               |
+      |  +---------------+      |   +---------------+      |               |
+      |  |               |      |   |               |      +---------------+
+      |  |               |      |   |---------------|              ^
+      |  |               |      +-->| PG TBL ENTRY  |--------------+
+      |  |---------------|          |---------------|
+      +->|   DIR ENTRY   |--+       |               |
+         |---------------|  |       |               |
+         |               |  |       |               |
+         +---------------+  |       +---------------+
+                 ^          |               ^
++-------+        |          +---------------+
+| PTBR  |--------+
++-------+
+
+```
+#### 页目录表项，页表项的属性
+```
+  PTE_P = 0x001, // present
+  PTE_W = 0x002, // writeable
+  PTE_U = 0x004, // user
+  PTE_A = 0x020, // accessed
+  PTE_D = 0x040, // dirty
+```
+
+#### 页目录表项，页表项的组成
+```
+DIR_ENTRY=　[高20位：二级页表地址的高20位（4KB对齐）][低12位属性]　
+
+PT_ENTRY　=　[高20位：物理页帧地址的高20位（4KB对齐）][低12位属性]　
+```
+
+### 页访问异常
+```
+  FMEM,   // bad physical address
+  FIPAGE, // page fault on opcode fetch
+  FWPAGE, // page fault on write
+  FRPAGE, // page fault on read
+  USER=16 // user mode exception
+```
+
+通过LVAD指令可获得访问异常的虚地址并赋值给寄存器a　
+
 ## IO操作
 ### 写外设（类似串口写）的步骤
  - 1 --> a
