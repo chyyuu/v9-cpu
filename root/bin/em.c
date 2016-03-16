@@ -701,10 +701,10 @@ void printi(int addr, int tpc) {
   uint *xpc = (uint * )(addr + tpc);
   int i = 0, j = 0;
   for (; i < funcN - 1; i++)
-    if (func[i].addr <= addr && addr < func[i + 1].addr) break;
+    if (func[i].addr <= (addr & 0x00ffffff) && (addr & 0x00ffffff) < func[i + 1].addr) break;
   for (; j < func[i].nameL; j++)
     printf("%c", func[i].nameS[j]);
-  printf("+%d : ", addr - func[i].addr);
+  printf("+%d : ", (addr & 0x00ffffff) - func[i].addr);
   printf("[%8.8x] %s 0x%06x\n", addr, ops + ((*xpc) & 255) * 5, (*xpc) >> 8);
 }
 
@@ -1351,7 +1351,7 @@ void cpu(uint pc, uint sp) {
     switch ((uchar) ir) {
       case JSR :
       case JSRA :
-        ipos = (uint)(xpc) - tpc;
+        ipos = ((uint)(xpc) - tpc) & 0x00ffffff;
         cpos = 0;
         while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
         for (i = 0; i < funcN - 1 && func[i].end < cpos; i++);
@@ -1377,7 +1377,7 @@ void cpu(uint pc, uint sp) {
     //printi((uint)(xpc-1)-tpc, tpc);
     //printf("pc = %x\n", (uint)(xpc-1)-tpc);
     if (cbp == -2) {
-      ipos = (uint)(xpc - 1) - tpc;
+      ipos = ((uint)(xpc - 1) - tpc) & 0x00ffffff;
       for (cpos = 0; cpos < stmtN; cpos++)
         if (stmts[cpos].start != stmts[cpos].end && ipos == stmts[cpos].start) {
           printf("break at : \n");
@@ -1480,7 +1480,7 @@ void cpu(uint pc, uint sp) {
             }
           }
           if (!strcmp(dbgbuf + 1, "c")) {
-            ipos = (uint)(xpc - 1) - tpc;
+            ipos = ((uint)(xpc - 1) - tpc) & 0x00ffffff;
             cpos = 0;
             while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
             i = (cpos > 10 ? cpos - 10 : 0);
@@ -1639,7 +1639,7 @@ void cpu(uint pc, uint sp) {
       }
     }
 
-    ipos = (uint)(xpc - 1) - tpc;
+    ipos = ((uint)(xpc - 1) - tpc) & 0x00ffffff;
     cpos = func[bts[btN - 1].func].line + bts[btN - 1].stmt;
     while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
     bts[btN - 1].stmt = cpos - func[bts[btN - 1].func].line;
