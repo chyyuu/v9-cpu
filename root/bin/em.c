@@ -625,12 +625,6 @@ void func_entry_match(uint* insts, int instN, char* codes, int codeL) {
 			}
 		}
 	}
-	
-	for (i = 0 ; i < stuN ; i++) {
-		printf("%s size=%d\n", stus[i].name, stus[i].size);
-		for (j = 0 ; j < stus[i].numN ; j++) 
-			printf("%s %s %s\n", stus[i].name, stus[i].nums[j].type, stus[i].nums[j].name);
-	} 
 }
 
 void printi(int addr, int tpc) {
@@ -1164,26 +1158,13 @@ fixsp:
     if ((uint)xpc == fpc) {
 fixpc:
 	//printf("b1\n");
+      //printf("fixpc\n");
       if (!(p = tr[(v = (uint)xpc - tpc) >> 12]) && !(p = rlook(v))) { trap = FIPAGE; goto exception; }
       xcycle -= tpc;
       xcycle += (tpc = (uint)(xpc = (int *)(v ^ (p-1))) - v);
       fpc = ((uint)xpc + 4096) & -4096;
-      switch ((uchar)ir) {
-    	case JSR :
-        	ipos = (uint)xpc-tpc;
-        	cpos = 0;
-        	while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
-        	for (i = 0 ; i < funcN-1 && func[i].end < cpos ; i++);
-    		bts[btN].func = i;
-    		bts[btN].stmt = cpos-func[i].line;
-    		bts[btN++].sp = xsp-tsp;
-    		break;
-    	case LEV :
-    		btN--;
-    		break;
-     }
 next:
-	//printf("b2\n");
+	//printf("next\n");
       if ((uint)xpc > xcycle) {
         cycle += delta;
         xcycle += delta * 4;
@@ -1208,6 +1189,31 @@ next:
         }
       }
     }
+    // =====> new feature : backtrace maintenance (push when JSR(A) / pop when LEV)
+      switch ((uchar)ir) {
+    	case JSR : case JSRA :
+        	ipos = (uint)(xpc)-tpc;
+        	cpos = 0;
+        	while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
+        	for (i = 0 ; i < funcN-1 && func[i].end < cpos ; i++);
+    		bts[btN].func = i;
+    		bts[btN].stmt = cpos-func[i].line;
+    		bts[btN++].sp = xsp-tsp;
+    		//printf("btN=%d func=%d stmt=%d sp=%d\n", 
+    		//	btN, bts[btN-1].func, bts[btN-1].stmt, bts[btN-1].sp);
+    		break;
+    	case LEV :
+    		if (!--btN) {
+    			for (i = 0 ; i < funcN ; i++)
+    				if (!strcmp(func[i].nameS, "mainc")) break;
+    			bts[0].func = i;
+    			bts[0].stmt = 0;
+    			bts[0].sp = xsp-tsp;
+    			btN = 1;
+    		}
+    		break;
+     }
+// <=====
 
     ir = *xpc++;
 	//printi((uint)(xpc-1)-tpc, tpc);
@@ -1473,9 +1479,9 @@ next:
     }
     
     ipos = (uint)(xpc-1)-tpc;
-    cpos = func[bts[btN].func].line+bts[btN].stmt;
+    cpos = func[bts[btN-1].func].line+bts[btN-1].stmt;
     while (cpos < stmtN && (stmts[cpos].start == stmts[cpos].end || ipos >= stmts[cpos].end)) cpos++;
-    bts[btN].stmt = cpos-func[bts[btN].func].line;
+    bts[btN-1].stmt = cpos-func[bts[btN-1].func].line;
     
     switch ((uchar)ir) {
     case HALT: if (user || verbose) dprintf(2,"halt(%d) cycle = %u\n", a, cycle + (int)((uint)xpc - xcycle)/4); return; // XXX should be supervisor!
