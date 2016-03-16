@@ -4,13 +4,15 @@ Simple 32-bit v9-CPU with Simulator+Compiler+debugger+OS
 
 ## USAGE
 ### Prepare
-in ubuntu 15.10 x86-64
+In ubuntu 15.10x86-64.
+
+(Other ubuntu or linux distrbutions are also ok. but need to del -m32 in 32-bit os)
 
 ```
 sudo apt-get install gcc gdb make libc6-dev-i386
 ```
 
-see boot-dbg.sh
+Please see boot-dbg.sh
 
 ### build c compiler
 
@@ -66,5 +68,5 @@ debug(press 'h' for help)
 run
 
 ```
-./xem  fs.img os
+./xem  -f fs.img os
 ```
