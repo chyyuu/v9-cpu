@@ -30,6 +30,7 @@ set(CC_SOURCE_FILES
     root/bin/c.c)
 
 set(EX_SOURCE_FILES
+    root/etc/os.c
     root/usr/os/os0.c
     root/usr/os/os1.c
     root/usr/os/os2.c
