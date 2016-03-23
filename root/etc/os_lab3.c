@@ -13,7 +13,8 @@ struct trapframe { // layout of the trap frame built on the stack by trap handle
 
 //process
 struct proc { 
-	uint sz;               // size of process memory (bytes)
+	uint sz;               // size of process virtual memory (bytes)
+	uint physz;			   // size of process physical memory (bytes)
 	uint *pdir;            // page directory
 	char *kstack;          // bottom of kernel stack for this process
 	struct trapframe *tf;  // trap frame for current syscall
@@ -45,9 +46,13 @@ splx(int e)     { if (e) asm(STI); }
 char *kalloc()
 {
   char *r; int e = splhi();
-  if ((uint)(r = mem_top) < P2V+(mem_sz - FSSIZE)) 
+  if ((uint)(r = mem_top) < P2V+(mem_sz - FSSIZE)) {
 	  mem_top += PAGE; //XXX uint issue is going to be a problem with other pointer compares!
-  else panic("kalloc failure!");  //XXX need to sleep here!
+	  //printf("kalloc success! ,mem_top is 0x%x\n",mem_top); 
+  } else {
+      printf("kalloc failure! ,mem_top is 0x%x, max addr is 0x%x",P2V+(mem_sz - FSSIZE)); 
+	  panic("\n");//XXX need to sleep here!
+  }
   splx(e);
   return r;
 }
@@ -61,7 +66,7 @@ cout(char c)
 panic(char *s)
 {
   asm(CLI);
-  out(1,'p'); out(1,'a'); out(1,'n'); out(1,'i'); out(1,'c'); out(1,':'); out(1,' '); 
+  out(1,'P'); out(1,'A'); out(1,'N'); out(1,'I'); out(1,'C'); out(1,':'); out(1,':'); 
   while (*s) out(1,*s++);
   out(1,'\n');
   asm(HALT);
@@ -98,48 +103,56 @@ forkret()
   asm(RTI);
 }
 
-// Look in the process table for an UNUSED proc.  If found, change state to EMBRYO and initialize
-// state required to run in the kernel.  Otherwise return 0.
-struct proc *allocproc()
-{
-  struct proc *p; char *sp; 
-  int e = splhi();
-  p = &proc0;
-  splx(e);
-
-  // allocate kernel stack leaving room for trap frame
-  sp = (p->kstack = kalloc()) + PAGE - sizeof(struct trapframe);
-  p->tf = (struct trapframe *)sp;
-  
-  // set up new context to start executing at forkret
-  sp -= 8;
-  *(uint *)sp = (uint)forkret;
-
-  p->context = sp;
-  return p;
-}
-
 // hand-craft the first process
 init_start()
 {
-  int i;
-  i=1;
-  while(i){};
+  int i,j,n,m;
+  int * adr;
+  j=1;
+  while(j){
+	  for (i=PAGE;i<UVIRSZ+16; i+=4){
+		  adr=i;
+		  *adr=j;
+	  }		  
+  };
   
 }
 
 userinit()
 {
-  char *mem;
-  init = allocproc();
-  init->pdir = memcpy(kalloc(), kpdir, PAGE);
-  mem = memcpy(memset(kalloc(), 0, PAGE), (char *)init_start, (uint)userinit - (uint)init_start);
-  mappage(init->pdir, 0, V2P+mem, PTE_P | PTE_W | PTE_U);
+	char *mem;
+	char *sp; 
+	uint virnum, phynum, i;
+	
+	init = &proc0;
+	
+	// allocate kernel stack leaving room for trap frame
+	sp = (init->kstack = kalloc()) + PAGE - sizeof(struct trapframe);
+	init->tf = (struct trapframe *)sp;
+	// set up new context to start executing at forkret
+	sp -= 8;
+	*(uint *)sp = (uint)forkret;
+	init->context = sp;
+	
+	init->sz = UVIRSZ;
+	init->physz = UPHYSZ;
+	virnum=init->sz / PAGE ;
+	phynum=init->physz/ PAGE;
 
-  init->sz = PAGE;
-  init->tf->sp = PAGE;
-  init->tf->fc = USER;
-  init->tf->pc = 0;
+	init->pdir = memcpy(kalloc(), kpdir, PAGE);
+	
+	for(i=0;i<phynum;i++) {
+		if (i ==0) 
+			mem = memcpy(memset(kalloc(), 0, PAGE), (char *)init_start, (uint)userinit - (uint)init_start);
+		else
+			mem = memset(kalloc(), 0, PAGE);
+		mappage(init->pdir, i*PAGE, V2P+mem, PTE_P | PTE_W | PTE_U);
+	}
+
+	init->tf->sp = STACKSZ;
+	init->tf->fc = USER;
+	init->tf->pc = 0;
+	printf("user app init sp 0x%x, pdir 0x%x, virnum %d, phynum %d, i %d\n",init->tf->sp,init->pdir, virnum, phynum,i);
 }
 
 // set up kernel page table
@@ -177,6 +190,7 @@ trap(uint *sp, double g, double f, int c, int b, int a, int fc, uint *pc)
 {
   uint va;
   switch (fc) {
+  //syscalls
   case FSYS: panic("FSYS from kernel");
   case FSYS + USER:
     init->tf = &sp;
@@ -184,26 +198,31 @@ trap(uint *sp, double g, double f, int c, int b, int a, int fc, uint *pc)
     default: printf("user app invoke unknown syscall %d\n", a); a = -1; break;
     }
     return;
-    
+  //exceptions  
   case FMEM:          panic("FMEM from kernel\n");
-  case FMEM   + USER: panic("FMEM + USER\n");  // XXX psignal(SIGBUS)
+  case FMEM   + USER: panic("FMEM + USER\n");  
   case FPRIV:         panic("FPRIV from kernel");
-  case FPRIV  + USER: panic("FPRIV + USER\n"); // XXX psignal(SIGINS)
+  case FPRIV  + USER: panic("FPRIV + USER\n"); 
   case FINST:         panic("FINST from kernel");
-  case FINST  + USER: panic("FINST + USER\n"); // psignal(SIGINS)
+  case FINST  + USER: panic("FINST + USER\n"); 
   case FARITH:        panic("FARITH from kernel");
-  case FARITH + USER: panic("FARITH + USER\n"); // XXX psignal(SIGFPT)
+  case FARITH + USER: panic("FARITH + USER\n");
   case FIPAGE:        printf("FIPAGE from kernel [0x%x]", lvadr()); panic("!\n");
-  case FIPAGE + USER: printf("FIPAGE + USER [0x%x]", lvadr()); panic("!\n"); // XXX psignal(SIGSEG) or page in
-  case FWPAGE:
-  case FWPAGE + USER:
-  case FRPAGE:        // XXX
-  case FRPAGE + USER: // XXX
-    if ((va = lvadr()) >= init->sz) panic("va > u->sz\n");;
-    pc--; // printf("fault"); // restart instruction
-    mappage(init->pdir, va & -PAGE, V2P+(memset(kalloc(), 0, PAGE)), PTE_P | PTE_W | PTE_U);
-    return;
 
+  case FWPAGE:        printf("FWPAGE + KER  [0x%x]", lvadr()); panic("!\n");
+  case FRPAGE:        printf("FRPAGE + KER  [0x%x]", lvadr()); panic("!\n");	  
+  case FIPAGE + USER: printf("FIPAGE + USER [0x%x] ", lvadr());	 goto PGFAULT;  
+  case FWPAGE + USER: printf("FWPAGE + USER [0x%x] ", lvadr());  goto PGFAULT;
+  case FRPAGE + USER: printf("FRPAGE + USER [0x%x] ", lvadr());
+PGFAULT:  if ((va = lvadr()) >= init->sz) {
+			  printf(">= init->sz 0x%x ", init->sz); panic("!\n");
+		  } else {
+			  printf("ADD new phy page\n");	
+              pc--; // restart instruction
+              mappage(init->pdir, va & -PAGE, V2P+(memset(kalloc(), 0, PAGE)), PTE_P | PTE_W | PTE_U);
+              return;
+		  }
+  //device interrupts
   case FTIMER: 
 	ticks++;
 	cout('-');
@@ -247,7 +266,6 @@ mainc()
   userinit();            // first user process
   printf("mainc %x, Welcome!\n",mainc);
 
-  //while(1);
   pdir(V2P+(uint)(proc0.pdir));
   kstack = proc0.context; //proc0 kstack
   asm(SSP);   // sp = a
@@ -258,13 +276,13 @@ mainc()
 main()
 {
   int *ksp;              // temp kernel stack pointer
-  static char kstack[256]; // temp kernel stack
+  static char kstack[4096]; // temp kernel stack
   static int endbss;     // last variable in bss segment
-  printf("main %x, Welcome!\n",main);  
+  printf("main addr 0x%x, Welcome!\n",main);  
   // initialize memory allocation
   mem_top = kreserved = ((uint)&endbss + PAGE + 3) & -PAGE; 
   mem_sz = msiz();
-  
+  printf("phy mem total size 0x%x\nfree mem begin 0x%x, top 0x%x\n",mem_sz, mem_top,mem_sz-FSSIZE);  
   // initialize kernel page table
   setupkvm();
   kpdir[0] = kpdir[(uint)USERTOP >> 22]; // need a 1:1 map of low physical memory for awhile
