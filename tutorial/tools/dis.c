@@ -97,11 +97,11 @@ int main(int argc, char** argv) {
 		int inst = dat[i]&255;
 		int imme = dat[i]>>8;
 		if (ops[inst*5] == 'B' && ops[inst*5+1] != 'I' && ops[inst*5+1] != 'O') {
-			printf("b to %d\n", i+(imme>>2)+1);
+			//printf("b to %d\n", i+(imme>>2)+1);
 			label[i+(imme>>2)+1] = ++label_sz;
 		}
 		if (ops[inst*5] == 'J') {
-			printf("j to %d\n", i+(imme>>2)+1);
+			//printf("j to %d\n", i+(imme>>2)+1);
 			label[i+(imme>>2)+1] = ++label_sz;
 		}
 	}

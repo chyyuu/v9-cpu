@@ -37,38 +37,16 @@ enum {
 typedef unsigned char uchar;
 typedef unsigned short ushort;
 typedef unsigned int uint;
-
-int current;
-
+# output a char to screen
 out(port, val)  { asm(LL,8); asm(LBL,16); asm(BOUT); }
-ivec(void *isr) { asm(LL,8); asm(IVEC); }
-stmr(int val)   { asm(LL,8); asm(TIME); }
+# halt v9 system
 halt(val)       { asm(LL,8); asm(HALT); }
-
-alltraps()
-{
-  asm(PSHA);
-  asm(PSHB);
-
-  current++;
-
-  asm(POPB);
-  asm(POPA);
-  asm(RTI);
-}
 
 main()
 {
-  current = 0;
-
-  stmr(1000);
-  ivec(alltraps);
-  
-  asm(STI);
-  
-  while (current < 10) {
-    if (current & 1) out(1, '1'); else out(1, '0');
-  }
+   out(1, 'H');out(1, 'e');out(1, 'l');out(1, 'l');out(1, 'o');out(1, ' ');
+   out(1, 'W');out(1, 'o');out(1, 'r');out(1, 'l');out(1, 'd');out(1, '!');
+   out(1, '\n');
 
   halt(0);
 }
